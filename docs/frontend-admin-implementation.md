@@ -16,7 +16,7 @@
 - Trace Export：调用 `GET /tasks/{id}/trace/export` 并展示 JSON。
 - Tools：展示当前只读工具目录和能力边界。
 - Docs：侧边栏新增文档中心，包含使用文档和实操手册。
-- Skills：侧边栏新增 Skill 控制台，支持从线上 URL 拉取 Skill 文本、手动新建 Skill，并保存到浏览器 localStorage。
+- Skills：侧边栏新增 Skill 控制台，支持设置本地保存目录、从线上 URL 拉取 Skill 文本、手动新建 Skill，并通过 C# API 自动保存为本地 `*.md` 文件。
 - i18n：支持中文 / English 双语言切换。
 - Glossary：部分技术名词支持鼠标悬浮说明，例如 Agent、Trace、SkillHub、Risk Level、Runtime、Tool Chain、Eval、Prompt、API、CI。
 - UI：整体升级为深色科幻控制台风格，包含星图背景、霓虹边框、发光状态和高对比操作区。
@@ -27,6 +27,7 @@
 - 图标：lucide-react。
 - API 代理：Vite dev server 将 `/api` 代理到 `http://localhost:5055`。
 - 后端契约：C# API 增加 `JsonStringEnumConverter`，确保枚举以字符串形式输出，匹配前端类型与产品文档。
+- Skill 文件存储：C# API 提供 `GET /skills/directory`、`GET /skills`、`POST /skills`，默认保存到 API `data/skills` 目录；前端可以指定保存目录，后端会限制目录必须位于仓库或当前用户目录下。
 
 ## 本地启动
 

@@ -15,6 +15,11 @@ builder.Services.AddSingleton<ITaskStore>(_ =>
 builder.Services.AddSingleton<TaskService>();
 builder.Services.AddSingleton<IToolCommandRunner, ProcessToolCommandRunner>();
 builder.Services.AddSingleton<AgentExecutionService>();
+builder.Services.AddSingleton(_ =>
+{
+    var path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "data", "skills");
+    return new SkillFileStore(path);
+});
 
 var app = builder.Build();
 
@@ -64,6 +69,42 @@ app.MapGet("/tasks/{id:guid}/trace/export", (Guid id, TaskService tasks) =>
     return Results.Ok(new TraceExportResponse(task.Id, task.Input, task.Status, task.RiskLevel, task.ApprovalStatus, trace));
 });
 
+app.MapGet("/skills/directory", (SkillFileStore skills) =>
+    Results.Ok(new SkillDirectoryResponse(skills.DefaultDirectory)));
+
+app.MapGet("/skills", (string? directory, SkillFileStore skills) =>
+{
+    try
+    {
+        return Results.Ok(skills.List(directory));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/skills", (SaveSkillFileApiRequest request, SkillFileStore skills) =>
+{
+    try
+    {
+        var skill = skills.Save(new SaveSkillFileRequest(
+            request.Name,
+            request.Source,
+            request.Content,
+            request.Directory));
+        return Results.Created($"/skills/{skill.Id}", skill);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.MapPost("/tasks/{id:guid}/trace", (Guid id, AppendTraceRequest request, TaskService tasks) =>
 {
     var traceEvent = tasks.AppendTrace(
@@ -102,6 +143,12 @@ public sealed record ExecuteTaskApiRequest(
     string? ScanExtension,
     string? LogFilePath,
     bool IncludeGitDiff);
+
+public sealed record SaveSkillFileApiRequest(
+    string Name,
+    string Source,
+    string Content,
+    string? Directory);
 
 public sealed record TraceExportResponse(
     Guid TaskId,

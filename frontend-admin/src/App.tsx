@@ -26,14 +26,18 @@ import {
   executeTask,
   exportTrace,
   getHealth,
+  getSkillDirectory,
   getTask,
   getTrace,
+  listSkillFiles,
   listTasks,
   rejectTask,
+  saveSkillFile,
+  type SkillFileRecord,
 } from './api'
 import { type GlossaryTerm, getGlossaryText } from './glossary'
 import { t, type Language } from './i18n'
-import { deleteSkill, fetchSkillText, loadSkills, saveSkill, type SkillRecord } from './skillStore'
+import { fetchSkillText } from './skillStore'
 import type {
   AgentTask,
   AgentTraceEvent,
@@ -673,23 +677,23 @@ function DocsView({ language }: { language: Language }) {
         <div className="doc-grid">
           <article>
             <strong><Glossary language={language} term="Agent" label="Agent" /></strong>
-            <p>{getGlossaryText('Agent', language)}</p>
+            <p>{t(language, 'docsAgentShort')}</p>
           </article>
           <article>
             <strong><Glossary language={language} term="Runtime" label="Runtime" /></strong>
-            <p>{getGlossaryText('Runtime', language)}</p>
+            <p>{t(language, 'docsRuntimeShort')}</p>
           </article>
           <article>
             <strong><Glossary language={language} term="Tool Chain" label="Tool Chain" /></strong>
-            <p>{getGlossaryText('Tool Chain', language)}</p>
+            <p>{t(language, 'docsToolShort')}</p>
           </article>
           <article>
             <strong><Glossary language={language} term="CI" label="CI" /></strong>
-            <p>{getGlossaryText('CI', language)}</p>
+            <p>{t(language, 'docsCiShort')}</p>
           </article>
         </div>
       </section>
-      <section className="panel">
+      <section className="panel manual-panel">
         <div className="section-title">
           <h2>{t(language, 'operationManual')}</h2>
           <Rocket size={18} />
@@ -702,27 +706,86 @@ function DocsView({ language }: { language: Language }) {
           <li>{t(language, 'manualStep5')}</li>
         </ol>
       </section>
+      <section className="panel wide docs-guide-panel">
+        <div className="section-title">
+          <h2><Glossary language={language} term="Skill" label={t(language, 'skillWritingGuide')} /></h2>
+          <Sparkles size={18} />
+        </div>
+        <p className="lead-text">{t(language, 'skillGuideIntro')}</p>
+        <div className="rule-grid">
+          <span>{t(language, 'skillRuleOne')}</span>
+          <span>{t(language, 'skillRuleTwo')}</span>
+          <span>{t(language, 'skillRuleThree')}</span>
+          <span>{t(language, 'skillRuleFour')}</span>
+          <span>{t(language, 'skillRuleFive')}</span>
+          <span>{t(language, 'skillRuleSix')}</span>
+        </div>
+      </section>
     </div>
   )
 }
 
 function SkillsView({ language, setNotice }: { language: Language; setNotice: (notice: string) => void }) {
-  const [skills, setSkills] = useState<SkillRecord[]>(() => loadSkills())
+  const [skills, setSkills] = useState<SkillFileRecord[]>([])
+  const [directory, setDirectory] = useState('')
   const [url, setUrl] = useState('')
   const [name, setName] = useState('New Skill')
   const [source, setSource] = useState('local')
   const [content, setContent] = useState('# SKILL.md\n\n')
   const [busy, setBusy] = useState(false)
 
+  const reloadSkills = useCallback(async (targetDirectory = directory) => {
+    setBusy(true)
+    try {
+      const files = await listSkillFiles(targetDirectory || undefined)
+      setSkills(files)
+      setNotice(t(language, 'directoryLoaded'))
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }, [directory, language, setNotice])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      async function loadDirectory() {
+        setBusy(true)
+        try {
+          const result = await getSkillDirectory()
+          setDirectory(result.directory)
+          const files = await listSkillFiles(result.directory)
+          setSkills(files)
+          setNotice(t(language, 'directoryLoaded'))
+        } catch (error) {
+          setNotice(toMessage(error))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      void loadDirectory()
+    }, 0)
+    return () => window.clearTimeout(handle)
+  }, [language, setNotice])
+
   async function fetchFromUrl() {
     if (!url.trim()) return
     setBusy(true)
     try {
       const text = await fetchSkillText(url.trim())
+      const importedName = url.split('/').filter(Boolean).at(-1) ?? 'Imported Skill'
       setContent(text)
       setSource(url.trim())
-      setName(url.split('/').filter(Boolean).at(-1) ?? 'Imported Skill')
-      setNotice(t(language, 'fetchedSkill'))
+      setName(importedName)
+      const saved = await saveSkillFile({
+        name: importedName,
+        source: url.trim(),
+        content: text,
+        directory: directory || undefined,
+      })
+      await reloadSkills(saved.directory)
+      setNotice(`${t(language, 'savedToDirectory')}: ${saved.filePath}`)
     } catch (error) {
       setNotice(toMessage(error))
     } finally {
@@ -730,18 +793,24 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
     }
   }
 
-  function persistSkill(event: React.FormEvent) {
+  async function persistSkill(event: React.FormEvent) {
     event.preventDefault()
     if (!name.trim() || !content.trim()) return
-    saveSkill({ name: name.trim(), source: source.trim() || 'local', content })
-    setSkills(loadSkills())
-    setNotice(t(language, 'savedSkill'))
-  }
-
-  function removeSkill(id: string) {
-    deleteSkill(id)
-    setSkills(loadSkills())
-    setNotice(t(language, 'deletedSkill'))
+    setBusy(true)
+    try {
+      const saved = await saveSkillFile({
+        name: name.trim(),
+        source: source.trim() || 'local',
+        content,
+        directory: directory || undefined,
+      })
+      await reloadSkills(saved.directory)
+      setNotice(`${t(language, 'savedToDirectory')}: ${saved.filePath}`)
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -753,11 +822,19 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
         </div>
         <div className="stack-form">
           <label>
+            {t(language, 'skillDirectory')}
+            <input value={directory} onChange={(event) => setDirectory(event.target.value)} />
+            <small className="field-hint">{t(language, 'skillDirectoryHint')}</small>
+          </label>
+          <label>
             {t(language, 'skillHubUrl')}
             <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/SKILL.md" />
           </label>
           <button type="button" disabled={busy} onClick={() => void fetchFromUrl()}>
             <RefreshCw size={16} /> {t(language, 'fetchSkill')}
+          </button>
+          <button type="button" disabled={busy} onClick={() => void reloadSkills()}>
+            <RefreshCw size={16} /> {t(language, 'reloadFiles')}
           </button>
         </div>
       </section>
@@ -797,10 +874,8 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
               <div>
                 <strong>{skill.name}</strong>
                 <small>{skill.source} · {formatDate(skill.updatedAt)}</small>
+                <small>{t(language, 'filePath')}: {skill.filePath}</small>
               </div>
-              <button className="danger-button" onClick={() => removeSkill(skill.id)}>
-                <X size={15} /> {t(language, 'delete')}
-              </button>
               <pre>{skill.content}</pre>
             </article>
           ))}

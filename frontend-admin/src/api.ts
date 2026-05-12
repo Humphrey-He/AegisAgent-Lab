@@ -7,6 +7,24 @@ import type {
   TraceExportResponse,
 } from './types'
 
+export type SkillFileRecord = {
+  id: string
+  name: string
+  source: string
+  content: string
+  directory: string
+  filePath: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type SaveSkillFilePayload = {
+  name: string
+  source: string
+  content: string
+  directory?: string
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -66,4 +84,20 @@ export function getTrace(id: string) {
 
 export function exportTrace(id: string) {
   return request<TraceExportResponse>(`/tasks/${id}/trace/export`)
+}
+
+export function getSkillDirectory() {
+  return request<{ directory: string }>('/skills/directory')
+}
+
+export function listSkillFiles(directory?: string) {
+  const query = directory ? `?directory=${encodeURIComponent(directory)}` : ''
+  return request<SkillFileRecord[]>(`/skills${query}`)
+}
+
+export function saveSkillFile(payload: SaveSkillFilePayload) {
+  return request<SkillFileRecord>('/skills', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
