@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
+  BookOpen,
   Check,
   ClipboardList,
   Code2,
@@ -9,11 +10,14 @@ import {
   FileJson,
   GitBranch,
   Gauge,
+  Globe2,
   ListChecks,
   Play,
   RefreshCw,
+  Rocket,
   Search,
   ShieldCheck,
+  Sparkles,
   X,
 } from 'lucide-react'
 import {
@@ -27,6 +31,9 @@ import {
   listTasks,
   rejectTask,
 } from './api'
+import { type GlossaryTerm, getGlossaryText } from './glossary'
+import { t, type Language } from './i18n'
+import { deleteSkill, fetchSkillText, loadSkills, saveSkill, type SkillRecord } from './skillStore'
 import type {
   AgentTask,
   AgentTraceEvent,
@@ -37,15 +44,6 @@ import type {
 } from './types'
 import './App.css'
 
-const metrics = [
-  { label: 'Phase completion', value: '4/4', hint: 'Phase 1-4 accepted' },
-  { label: 'Automated tests', value: '31', hint: 'Go, C#, Rust' },
-  { label: 'Callable tools', value: '4', hint: 'Read-only chain' },
-  { label: 'Trace abilities', value: '11', hint: 'Persist and export' },
-  { label: 'Eval samples', value: '0', hint: 'Real runs pending' },
-  { label: 'Prompt templates', value: '5', hint: 'Reusable prompts' },
-]
-
 const toolCatalog = [
   { name: 'go-read-file', runtime: 'Go', capability: 'Read a relative file path' },
   { name: 'go-git-diff', runtime: 'Go', capability: 'Inspect git diff stat' },
@@ -55,9 +53,10 @@ const toolCatalog = [
 
 const riskOptions: RiskLevel[] = ['Low', 'Medium', 'High']
 
-type View = 'dashboard' | 'tasks' | 'detail' | 'tools'
+type View = 'dashboard' | 'tasks' | 'detail' | 'tools' | 'docs' | 'skills'
 
 function App() {
+  const [language, setLanguage] = useState<Language>('zh')
   const [view, setView] = useState<View>('dashboard')
   const [tasks, setTasks] = useState<AgentTask[]>([])
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
@@ -66,8 +65,20 @@ function App() {
   const [traceExport, setTraceExport] = useState<TraceExportResponse | null>(null)
   const [toolResults, setToolResults] = useState<ToolCommandResult[]>([])
   const [health, setHealth] = useState('unknown')
-  const [notice, setNotice] = useState('Ready')
+  const [notice, setNotice] = useState(t(language, 'ready'))
   const [loading, setLoading] = useState(false)
+
+  const metrics = useMemo(
+    () => [
+      { label: t(language, 'phaseCompletion'), value: '4/4', hint: t(language, 'phaseHint') },
+      { label: t(language, 'automatedTests'), value: '31', hint: t(language, 'testsHint') },
+      { label: t(language, 'callableTools'), value: '4', hint: t(language, 'toolsHint') },
+      { label: t(language, 'traceAbilities'), value: '11', hint: t(language, 'traceHint') },
+      { label: t(language, 'evalSamples'), value: '0', hint: t(language, 'evalHint') },
+      { label: t(language, 'promptTemplates'), value: '5', hint: t(language, 'promptHint') },
+    ],
+    [language],
+  )
 
   const completedTasks = tasks.filter((task) => task.status === 'Completed').length
   const pendingApprovals = tasks.filter((task) => task.approvalStatus === 'Pending').length
@@ -79,31 +90,21 @@ function App() {
     return { failed, blocked, completed }
   }, [trace])
 
-  useEffect(() => {
-    void refreshAll()
-  }, [])
-
-  useEffect(() => {
-    if (selectedTaskId) {
-      void loadTaskDetail(selectedTaskId)
-    }
-  }, [selectedTaskId])
-
-  async function refreshAll() {
+  const refreshAll = useCallback(async () => {
     setLoading(true)
     try {
       const [healthResult, taskResult] = await Promise.all([getHealth(), listTasks()])
       setHealth(healthResult.status)
       setTasks(sortTasks(taskResult))
-      setNotice('Synced with API')
+      setNotice(t(language, 'synced'))
     } catch (error) {
       setNotice(toMessage(error))
     } finally {
       setLoading(false)
     }
-  }
+  }, [language])
 
-  async function loadTaskDetail(id: string) {
+  const loadTaskDetail = useCallback(async (id: string) => {
     setLoading(true)
     try {
       const [taskResult, traceResult] = await Promise.all([getTask(id), getTrace(id)])
@@ -116,7 +117,24 @@ function App() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void refreshAll()
+    }, 0)
+    return () => window.clearTimeout(handle)
+  }, [refreshAll])
+
+  useEffect(() => {
+    if (selectedTaskId) {
+      const handle = window.setTimeout(() => {
+        void loadTaskDetail(selectedTaskId)
+      }, 0)
+      return () => window.clearTimeout(handle)
+    }
+    return undefined
+  }, [loadTaskDetail, selectedTaskId])
 
   async function mutateTask(action: () => Promise<AgentTask>, success: string) {
     setLoading(true)
@@ -140,7 +158,7 @@ function App() {
     try {
       const task = await createTask(payload)
       setSelectedTaskId(task.id)
-      setNotice('Task created')
+      setNotice(t(language, 'taskCreated'))
       await refreshAll()
     } catch (error) {
       setNotice(toMessage(error))
@@ -158,7 +176,7 @@ function App() {
       setTrace(result.trace)
       setToolResults(result.toolResults)
       setTraceExport(null)
-      setNotice('Execution finished')
+      setNotice(t(language, 'executionFinished'))
       await refreshAll()
     } catch (error) {
       setNotice(toMessage(error))
@@ -173,7 +191,7 @@ function App() {
     try {
       const result = await exportTrace(selectedTask.id)
       setTraceExport(result)
-      setNotice('Trace export loaded')
+      setNotice(t(language, 'traceExportLoaded'))
     } catch (error) {
       setNotice(toMessage(error))
     } finally {
@@ -185,36 +203,43 @@ function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <ShieldCheck size={28} />
+          <ShieldCheck size={30} />
           <div>
             <strong>AegisAgent Lab</strong>
-            <span>Agent Control Plane</span>
+            <span>
+              <Glossary language={language} term="Agent" label="Agent" /> Control Plane
+            </span>
           </div>
         </div>
         <nav className="nav-list" aria-label="Primary">
-          <button className={view === 'dashboard' ? 'active' : ''} onClick={() => setView('dashboard')}>
-            <Gauge size={18} /> Dashboard
-          </button>
-          <button className={view === 'tasks' ? 'active' : ''} onClick={() => setView('tasks')}>
-            <ClipboardList size={18} /> Tasks
-          </button>
-          <button className={view === 'tools' ? 'active' : ''} onClick={() => setView('tools')}>
-            <Code2 size={18} /> Tools
-          </button>
+          <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Gauge size={18} />} label={t(language, 'navDashboard')} />
+          <NavButton active={view === 'tasks'} onClick={() => setView('tasks')} icon={<ClipboardList size={18} />} label={t(language, 'navTasks')} />
+          <NavButton active={view === 'tools'} onClick={() => setView('tools')} icon={<Code2 size={18} />} label={t(language, 'navTools')} />
+          <NavButton active={view === 'docs'} onClick={() => setView('docs')} icon={<BookOpen size={18} />} label={t(language, 'navDocs')} />
+          <NavButton active={view === 'skills'} onClick={() => setView('skills')} icon={<Sparkles size={18} />} label={t(language, 'navSkills')} />
         </nav>
+        <div className="language-switcher">
+          <Globe2 size={16} />
+          <span>{t(language, 'language')}</span>
+          <button className={language === 'zh' ? 'active' : ''} onClick={() => setLanguage('zh')}>中文</button>
+          <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>EN</button>
+        </div>
         <div className="sidebar-footer">
-          <span className={`health ${health === 'ok' ? 'ok' : ''}`}>API {health}</span>
-          <button className="icon-button" title="Refresh" onClick={() => void refreshAll()} disabled={loading}>
+          <span className={`health ${health === 'ok' ? 'ok' : ''}`}>
+            <Glossary language={language} term="API" label={t(language, 'api')} /> {health}
+          </span>
+          <button className="icon-button" title={t(language, 'refresh')} onClick={() => void refreshAll()} disabled={loading}>
             <RefreshCw size={17} />
           </button>
         </div>
       </aside>
 
       <section className="workspace">
+        <div className="starfield" />
         <header className="topbar">
           <div>
-            <p className="eyebrow">Phase four operational MVP</p>
-            <h1>{titleForView(view)}</h1>
+            <p className="eyebrow">{t(language, 'subtitle')}</p>
+            <h1>{titleForView(view, language)}</h1>
           </div>
           <div className="notice">
             {loading ? <RefreshCw size={16} className="spin" /> : <Activity size={16} />}
@@ -224,6 +249,7 @@ function App() {
 
         {view === 'dashboard' && (
           <Dashboard
+            language={language}
             metrics={metrics}
             taskCount={tasks.length}
             completedTasks={completedTasks}
@@ -234,6 +260,7 @@ function App() {
 
         {view === 'tasks' && (
           <TasksView
+            language={language}
             tasks={tasks}
             onCreate={(payload) => void handleCreate(payload)}
             onSelect={(id) => setSelectedTaskId(id)}
@@ -243,32 +270,37 @@ function App() {
 
         {view === 'detail' && selectedTask && (
           <TaskDetail
+            language={language}
             task={selectedTask}
             trace={trace}
             traceStatus={selectedTraceStatus}
             traceExport={traceExport}
             toolResults={toolResults}
-            onApprove={() => void mutateTask(() => approveTask(selectedTask.id), 'Task approved')}
-            onReject={() => void mutateTask(() => rejectTask(selectedTask.id), 'Task rejected')}
+            onApprove={() => void mutateTask(() => approveTask(selectedTask.id), t(language, 'taskApproved'))}
+            onReject={() => void mutateTask(() => rejectTask(selectedTask.id), t(language, 'taskRejected'))}
             onExecute={(payload) => void handleExecute(payload)}
             onExportTrace={() => void handleExportTrace()}
           />
         )}
 
-        {view === 'tools' && <ToolsView />}
+        {view === 'tools' && <ToolsView language={language} />}
+        {view === 'docs' && <DocsView language={language} />}
+        {view === 'skills' && <SkillsView language={language} setNotice={setNotice} />}
       </section>
     </main>
   )
 }
 
 function Dashboard({
+  language,
   metrics: dashboardMetrics,
   taskCount,
   completedTasks,
   pendingApprovals,
   onOpenTasks,
 }: {
-  metrics: typeof metrics
+  language: Language
+  metrics: Array<{ label: string; value: string; hint: string }>
   taskCount: number
   completedTasks: number
   pendingApprovals: number
@@ -288,39 +320,39 @@ function Dashboard({
 
       <section className="panel wide">
         <div className="section-title">
-          <h2>Execution Readiness</h2>
+          <h2>{t(language, 'executionReadiness')}</h2>
           <button onClick={onOpenTasks}>
-            <ListChecks size={16} /> Open tasks
+            <ListChecks size={16} /> {t(language, 'openTasks')}
           </button>
         </div>
         <div className="readiness-row">
-          <StatusBlock label="Tasks" value={String(taskCount)} tone="neutral" />
-          <StatusBlock label="Completed" value={String(completedTasks)} tone="success" />
-          <StatusBlock label="Pending approvals" value={String(pendingApprovals)} tone="warning" />
+          <StatusBlock label={t(language, 'tasks')} value={String(taskCount)} tone="neutral" />
+          <StatusBlock label={t(language, 'completed')} value={String(completedTasks)} tone="success" />
+          <StatusBlock label={t(language, 'pendingApprovals')} value={String(pendingApprovals)} tone="warning" />
         </div>
       </section>
 
       <section className="panel">
         <div className="section-title">
-          <h2>Guardrails</h2>
+          <h2>{t(language, 'guardrails')}</h2>
           <AlertTriangle size={18} />
         </div>
         <ul className="plain-list">
-          <li>Medium and high risk tasks require explicit approval.</li>
-          <li>Tools stay read-only: file read, git diff, code scan, log summary.</li>
-          <li>No production deployment or automatic code mutation is exposed.</li>
+          <li>{t(language, 'guardrailApproval')}</li>
+          <li>{t(language, 'guardrailReadonly')}</li>
+          <li>{t(language, 'guardrailNoProd')}</li>
         </ul>
       </section>
 
       <section className="panel">
         <div className="section-title">
-          <h2>Next Evidence</h2>
+          <h2>{t(language, 'nextEvidence')}</h2>
           <Search size={18} />
         </div>
         <ul className="plain-list">
-          <li>Run real eval cases with time and quality scores.</li>
-          <li>Use exported trace JSON in acceptance reviews.</li>
-          <li>Add backend metrics and tool catalog endpoints later.</li>
+          <li><Glossary language={language} term="Eval" label="Eval" />: {t(language, 'evidenceEval')}</li>
+          <li><Glossary language={language} term="Trace" label="Trace" />: {t(language, 'evidenceTrace')}</li>
+          <li>{t(language, 'evidenceMetrics')}</li>
         </ul>
       </section>
     </div>
@@ -328,11 +360,13 @@ function Dashboard({
 }
 
 function TasksView({
+  language,
   tasks,
   onCreate,
   onSelect,
   onRefresh,
 }: {
+  language: Language
   tasks: AgentTask[]
   onCreate: (payload: { input: string; requestedBy: string; riskLevel: RiskLevel }) => void
   onSelect: (id: string) => void
@@ -352,51 +386,49 @@ function TasksView({
     <div className="content-grid">
       <section className="panel create-panel">
         <div className="section-title">
-          <h2>Create Task</h2>
+          <h2>{t(language, 'createTask')}</h2>
           <ClipboardList size={18} />
         </div>
         <form onSubmit={submit} className="stack-form">
           <label>
-            Task input
+            {t(language, 'taskInput')}
             <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={4} />
           </label>
           <label>
-            Requested by
+            {t(language, 'requestedBy')}
             <input value={requestedBy} onChange={(event) => setRequestedBy(event.target.value)} />
           </label>
           <label>
-            Risk level
+            <Glossary language={language} term="Risk Level" label={t(language, 'riskLevel')} />
             <select value={riskLevel} onChange={(event) => setRiskLevel(event.target.value as RiskLevel)}>
               {riskOptions.map((risk) => (
-                <option key={risk} value={risk}>
-                  {risk}
-                </option>
+                <option key={risk} value={risk}>{risk}</option>
               ))}
             </select>
           </label>
           <button type="submit">
-            <Check size={16} /> Create
+            <Check size={16} /> {t(language, 'create')}
           </button>
         </form>
       </section>
 
       <section className="panel wide">
         <div className="section-title">
-          <h2>Task List</h2>
+          <h2>{t(language, 'taskList')}</h2>
           <button onClick={onRefresh}>
-            <RefreshCw size={16} /> Refresh
+            <RefreshCw size={16} /> {t(language, 'refresh')}
           </button>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Input</th>
-                <th>Status</th>
-                <th>Risk</th>
-                <th>Approval</th>
-                <th>Created</th>
-                <th>Action</th>
+                <th>{t(language, 'input')}</th>
+                <th>{t(language, 'status')}</th>
+                <th>{t(language, 'risk')}</th>
+                <th>{t(language, 'approval')}</th>
+                <th>{t(language, 'created')}</th>
+                <th>{t(language, 'action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -412,14 +444,14 @@ function TasksView({
                   <td>{formatDate(task.createdAt)}</td>
                   <td>
                     <button className="small-button" onClick={() => onSelect(task.id)}>
-                      Open
+                      {t(language, 'open')}
                     </button>
                   </td>
                 </tr>
               ))}
               {tasks.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty-cell">No tasks yet.</td>
+                  <td colSpan={6} className="empty-cell">{t(language, 'noTasks')}</td>
                 </tr>
               )}
             </tbody>
@@ -431,6 +463,7 @@ function TasksView({
 }
 
 function TaskDetail({
+  language,
   task,
   trace,
   traceStatus,
@@ -441,6 +474,7 @@ function TaskDetail({
   onExecute,
   onExportTrace,
 }: {
+  language: Language
   task: AgentTask
   trace: AgentTraceEvent[]
   traceStatus: { failed: number; blocked: number; completed: number }
@@ -455,65 +489,65 @@ function TaskDetail({
     <div className="content-grid">
       <section className="panel wide">
         <div className="section-title">
-          <h2>Task Detail</h2>
+          <h2>{t(language, 'taskDetail')}</h2>
           <div className="button-row">
             <button onClick={onApprove} disabled={task.approvalStatus !== 'Pending'}>
-              <Check size={16} /> Approve
+              <Check size={16} /> {t(language, 'approve')}
             </button>
             <button className="danger-button" onClick={onReject} disabled={task.approvalStatus !== 'Pending'}>
-              <X size={16} /> Reject
+              <X size={16} /> {t(language, 'reject')}
             </button>
           </div>
         </div>
         <div className="detail-grid">
-          <StatusBlock label="Status" value={task.status} tone={task.status === 'Completed' ? 'success' : 'neutral'} />
-          <StatusBlock label="Risk" value={task.riskLevel} tone={task.riskLevel === 'Low' ? 'success' : 'warning'} />
-          <StatusBlock label="Approval" value={task.approvalStatus} tone={task.approvalStatus === 'Pending' ? 'warning' : 'neutral'} />
-          <StatusBlock label="Trace events" value={String(trace.length)} tone="neutral" />
+          <StatusBlock label={t(language, 'status')} value={task.status} tone={task.status === 'Completed' ? 'success' : 'neutral'} />
+          <StatusBlock label={t(language, 'risk')} value={task.riskLevel} tone={task.riskLevel === 'Low' ? 'success' : 'warning'} />
+          <StatusBlock label={t(language, 'approval')} value={task.approvalStatus} tone={task.approvalStatus === 'Pending' ? 'warning' : 'neutral'} />
+          <StatusBlock label={t(language, 'traceEvents')} value={String(trace.length)} tone="neutral" />
         </div>
         <div className="detail-copy">
           <span>{task.id}</span>
           <p>{task.input}</p>
-          <small>Requested by {task.requestedBy} at {formatDate(task.createdAt)}</small>
+          <small>{t(language, 'requestedBy')} {task.requestedBy} · {formatDate(task.createdAt)}</small>
         </div>
       </section>
 
-      <ExecutePanel onExecute={onExecute} />
+      <ExecutePanel language={language} onExecute={onExecute} />
 
       <section className="panel wide">
         <div className="section-title">
-          <h2>Trace Timeline</h2>
+          <h2><Glossary language={language} term="Trace" label={t(language, 'traceTimeline')} /></h2>
           <div className="trace-stats">
             <Badge value={`completed ${traceStatus.completed}`} />
             <Badge value={`blocked ${traceStatus.blocked}`} />
             <Badge value={`failed ${traceStatus.failed}`} />
           </div>
         </div>
-        <TraceTimeline events={trace} />
+        <TraceTimeline language={language} events={trace} />
       </section>
 
       <section className="panel">
         <div className="section-title">
-          <h2>Trace Export</h2>
+          <h2>{t(language, 'traceExport')}</h2>
           <button onClick={onExportTrace}>
-            <FileJson size={16} /> Load JSON
+            <FileJson size={16} /> {t(language, 'loadJson')}
           </button>
         </div>
-        <JsonViewer value={traceExport ?? { message: 'Click Load JSON to fetch export.' }} />
+        <JsonViewer language={language} value={traceExport ?? { message: t(language, 'clickLoadJson') }} />
       </section>
 
       <section className="panel">
         <div className="section-title">
-          <h2>Tool Results</h2>
+          <h2>{t(language, 'toolResults')}</h2>
           <GitBranch size={18} />
         </div>
-        <JsonViewer value={toolResults.length > 0 ? toolResults : { message: 'No execution result in this UI session.' }} />
+        <JsonViewer language={language} value={toolResults.length > 0 ? toolResults : { message: t(language, 'noExecutionResult') }} />
       </section>
     </div>
   )
 }
 
-function ExecutePanel({ onExecute }: { onExecute: (payload: ExecuteTaskRequest) => void }) {
+function ExecutePanel({ language, onExecute }: { language: Language; onExecute: (payload: ExecuteTaskRequest) => void }) {
   const [readFilePath, setReadFilePath] = useState('go.mod')
   const [includeGitDiff, setIncludeGitDiff] = useState(true)
   const [scanRoot, setScanRoot] = useState('crates')
@@ -534,41 +568,41 @@ function ExecutePanel({ onExecute }: { onExecute: (payload: ExecuteTaskRequest) 
   return (
     <section className="panel">
       <div className="section-title">
-        <h2>Execute</h2>
+        <h2>{t(language, 'execute')}</h2>
         <Play size={18} />
       </div>
       <form className="stack-form" onSubmit={submit}>
         <label>
-          Read file path
+          {t(language, 'readFilePath')}
           <input value={readFilePath} onChange={(event) => setReadFilePath(event.target.value)} />
         </label>
         <label className="check-row">
           <input type="checkbox" checked={includeGitDiff} onChange={(event) => setIncludeGitDiff(event.target.checked)} />
-          Include git diff stat
+          {t(language, 'includeGitDiff')}
         </label>
         <label>
-          Scan root
+          {t(language, 'scanRoot')}
           <input value={scanRoot} onChange={(event) => setScanRoot(event.target.value)} />
         </label>
         <label>
-          Scan extension
+          {t(language, 'scanExtension')}
           <input value={scanExtension} onChange={(event) => setScanExtension(event.target.value)} />
         </label>
         <label>
-          Log file path
-          <input value={logFilePath} onChange={(event) => setLogFilePath(event.target.value)} placeholder="Optional absolute path" />
+          {t(language, 'logFilePath')}
+          <input value={logFilePath} onChange={(event) => setLogFilePath(event.target.value)} placeholder={t(language, 'optionalAbsolutePath')} />
         </label>
         <button type="submit">
-          <Play size={16} /> Execute
+          <Play size={16} /> {t(language, 'execute')}
         </button>
       </form>
     </section>
   )
 }
 
-function TraceTimeline({ events }: { events: AgentTraceEvent[] }) {
+function TraceTimeline({ language, events }: { language: Language; events: AgentTraceEvent[] }) {
   if (events.length === 0) {
-    return <p className="muted">No trace events.</p>
+    return <p className="muted">{t(language, 'noTraceEvents')}</p>
   }
 
   return (
@@ -584,7 +618,7 @@ function TraceTimeline({ events }: { events: AgentTraceEvent[] }) {
             <p>{event.message}</p>
             <small>{event.toolName} · {formatDate(event.occurredAt)}</small>
             <details>
-              <summary>Attributes JSON</summary>
+              <summary>{t(language, 'attributesJson')}</summary>
               <pre>{JSON.stringify(event.attributes, null, 2)}</pre>
             </details>
           </div>
@@ -594,12 +628,12 @@ function TraceTimeline({ events }: { events: AgentTraceEvent[] }) {
   )
 }
 
-function ToolsView() {
+function ToolsView({ language }: { language: Language }) {
   return (
     <div className="content-grid">
       <section className="panel wide">
         <div className="section-title">
-          <h2>Tool Catalog</h2>
+          <h2>{t(language, 'toolCatalog')}</h2>
           <Code2 size={18} />
         </div>
         <div className="tool-grid">
@@ -614,16 +648,183 @@ function ToolsView() {
       </section>
       <section className="panel">
         <div className="section-title">
-          <h2>Boundary</h2>
+          <h2>{t(language, 'boundary')}</h2>
           <ShieldCheck size={18} />
         </div>
         <ul className="plain-list">
-          <li>All current tools are read-only.</li>
-          <li>Execution is routed through C# API and recorded in trace.</li>
-          <li>Frontend exposes no write-to-repo action.</li>
+          <li>{t(language, 'toolBoundaryReadonly')}</li>
+          <li>{t(language, 'toolBoundaryTrace')}</li>
+          <li>{t(language, 'toolBoundaryNoWrite')}</li>
         </ul>
       </section>
     </div>
+  )
+}
+
+function DocsView({ language }: { language: Language }) {
+  return (
+    <div className="content-grid">
+      <section className="panel wide">
+        <div className="section-title">
+          <h2>{t(language, 'usageDoc')}</h2>
+          <BookOpen size={18} />
+        </div>
+        <p className="lead-text">{t(language, 'docsIntro')}</p>
+        <div className="doc-grid">
+          <article>
+            <strong><Glossary language={language} term="Agent" label="Agent" /></strong>
+            <p>{getGlossaryText('Agent', language)}</p>
+          </article>
+          <article>
+            <strong><Glossary language={language} term="Runtime" label="Runtime" /></strong>
+            <p>{getGlossaryText('Runtime', language)}</p>
+          </article>
+          <article>
+            <strong><Glossary language={language} term="Tool Chain" label="Tool Chain" /></strong>
+            <p>{getGlossaryText('Tool Chain', language)}</p>
+          </article>
+          <article>
+            <strong><Glossary language={language} term="CI" label="CI" /></strong>
+            <p>{getGlossaryText('CI', language)}</p>
+          </article>
+        </div>
+      </section>
+      <section className="panel">
+        <div className="section-title">
+          <h2>{t(language, 'operationManual')}</h2>
+          <Rocket size={18} />
+        </div>
+        <ol className="manual-list">
+          <li>{t(language, 'manualStep1')}</li>
+          <li>{t(language, 'manualStep2')}</li>
+          <li>{t(language, 'manualStep3')}</li>
+          <li>{t(language, 'manualStep4')}</li>
+          <li>{t(language, 'manualStep5')}</li>
+        </ol>
+      </section>
+    </div>
+  )
+}
+
+function SkillsView({ language, setNotice }: { language: Language; setNotice: (notice: string) => void }) {
+  const [skills, setSkills] = useState<SkillRecord[]>(() => loadSkills())
+  const [url, setUrl] = useState('')
+  const [name, setName] = useState('New Skill')
+  const [source, setSource] = useState('local')
+  const [content, setContent] = useState('# SKILL.md\n\n')
+  const [busy, setBusy] = useState(false)
+
+  async function fetchFromUrl() {
+    if (!url.trim()) return
+    setBusy(true)
+    try {
+      const text = await fetchSkillText(url.trim())
+      setContent(text)
+      setSource(url.trim())
+      setName(url.split('/').filter(Boolean).at(-1) ?? 'Imported Skill')
+      setNotice(t(language, 'fetchedSkill'))
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function persistSkill(event: React.FormEvent) {
+    event.preventDefault()
+    if (!name.trim() || !content.trim()) return
+    saveSkill({ name: name.trim(), source: source.trim() || 'local', content })
+    setSkills(loadSkills())
+    setNotice(t(language, 'savedSkill'))
+  }
+
+  function removeSkill(id: string) {
+    deleteSkill(id)
+    setSkills(loadSkills())
+    setNotice(t(language, 'deletedSkill'))
+  }
+
+  return (
+    <div className="content-grid">
+      <section className="panel">
+        <div className="section-title">
+          <h2><Glossary language={language} term="SkillHub" label={t(language, 'skillHubUrl')} /></h2>
+          <Sparkles size={18} />
+        </div>
+        <div className="stack-form">
+          <label>
+            {t(language, 'skillHubUrl')}
+            <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/SKILL.md" />
+          </label>
+          <button type="button" disabled={busy} onClick={() => void fetchFromUrl()}>
+            <RefreshCw size={16} /> {t(language, 'fetchSkill')}
+          </button>
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="section-title">
+          <h2>{t(language, 'newSkill')}</h2>
+          <Code2 size={18} />
+        </div>
+        <form className="stack-form" onSubmit={persistSkill}>
+          <label>
+            {t(language, 'skillName')}
+            <input value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label>
+            {t(language, 'skillSource')}
+            <input value={source} onChange={(event) => setSource(event.target.value)} />
+          </label>
+          <label>
+            {t(language, 'skillContent')}
+            <textarea className="code-editor" value={content} onChange={(event) => setContent(event.target.value)} rows={12} />
+          </label>
+          <button type="submit">
+            <Check size={16} /> {t(language, 'saveSkill')}
+          </button>
+        </form>
+      </section>
+
+      <section className="panel wide">
+        <div className="section-title">
+          <h2>{t(language, 'savedSkills')}</h2>
+          <Badge value={String(skills.length)} />
+        </div>
+        <div className="skill-list">
+          {skills.map((skill) => (
+            <article className="skill-card" key={skill.id}>
+              <div>
+                <strong>{skill.name}</strong>
+                <small>{skill.source} · {formatDate(skill.updatedAt)}</small>
+              </div>
+              <button className="danger-button" onClick={() => removeSkill(skill.id)}>
+                <X size={15} /> {t(language, 'delete')}
+              </button>
+              <pre>{skill.content}</pre>
+            </article>
+          ))}
+          {skills.length === 0 && <p className="muted">{t(language, 'noSkills')}</p>}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function NavButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button className={active ? 'active' : ''} onClick={onClick}>
+      {icon} {label}
+    </button>
+  )
+}
+
+function Glossary({ language, term, label }: { language: Language; term: GlossaryTerm; label: string }) {
+  return (
+    <span className="glossary-term" tabIndex={0}>
+      {label}
+      <span className="glossary-tip" role="tooltip">{getGlossaryText(term, language)}</span>
+    </span>
   )
 }
 
@@ -648,14 +849,14 @@ function Badge({ value }: { value: string }) {
   return <span className={`badge ${tone}`}>{value}</span>
 }
 
-function JsonViewer({ value }: { value: unknown }) {
+function JsonViewer({ language, value }: { language: Language; value: unknown }) {
   async function copy() {
     await navigator.clipboard.writeText(JSON.stringify(value, null, 2))
   }
 
   return (
     <div className="json-viewer">
-      <button className="copy-button" onClick={() => void copy()} title="Copy JSON">
+      <button className="copy-button" onClick={() => void copy()} title={t(language, 'copyJson')}>
         <Copy size={15} />
       </button>
       <pre>{JSON.stringify(value, null, 2)}</pre>
@@ -681,11 +882,13 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
-function titleForView(view: View) {
-  if (view === 'tasks') return 'Tasks'
-  if (view === 'detail') return 'Task Detail'
-  if (view === 'tools') return 'Tools'
-  return 'Dashboard'
+function titleForView(view: View, language: Language) {
+  if (view === 'tasks') return t(language, 'tasks')
+  if (view === 'detail') return t(language, 'taskDetail')
+  if (view === 'tools') return t(language, 'tools')
+  if (view === 'docs') return t(language, 'docs')
+  if (view === 'skills') return t(language, 'skills')
+  return t(language, 'dashboard')
 }
 
 function toMessage(error: unknown) {
