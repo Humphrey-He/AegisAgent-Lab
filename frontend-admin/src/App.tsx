@@ -711,8 +711,41 @@ function DocsView({ language }: { language: Language }) {
           <h2><Glossary language={language} term="Skill" label={t(language, 'skillWritingGuide')} /></h2>
           <Sparkles size={18} />
         </div>
-        <p className="lead-text">{t(language, 'skillGuideIntro')}</p>
-        <div className="rule-grid">
+        <div className="guide-summary">
+          <p>{t(language, 'skillGuideIntro')}</p>
+          <div className="guide-pill-row">
+            <span>Progressive Loading</span>
+            <span>Description Hook</span>
+            <span>RED-GREEN-REFACTOR</span>
+            <span>Tool Wrapper</span>
+          </div>
+        </div>
+        <div className="guide-card-grid">
+          <article>
+            <strong>{t(language, 'skillDescriptionTip')}</strong>
+            <p>{t(language, 'skillDescriptionBody')}</p>
+          </article>
+          <article>
+            <strong>{t(language, 'skillStructureTip')}</strong>
+            <p>{t(language, 'skillStructureBody')}</p>
+          </article>
+          <article>
+            <strong>{t(language, 'skillPatternTip')}</strong>
+            <p>{t(language, 'skillPatternBody')}</p>
+          </article>
+        </div>
+        <details className="review-details">
+          <summary>{t(language, 'skillArticleReview')}</summary>
+          <ul className="review-list">
+            <li>{t(language, 'skillReviewOne')}</li>
+            <li>{t(language, 'skillReviewTwo')}</li>
+            <li>{t(language, 'skillReviewThree')}</li>
+            <li>{t(language, 'skillReviewFour')}</li>
+            <li>{t(language, 'skillReviewFive')}</li>
+            <li>{t(language, 'skillReviewSix')}</li>
+          </ul>
+        </details>
+        <div className="rule-grid compact">
           <span>{t(language, 'skillRuleOne')}</span>
           <span>{t(language, 'skillRuleTwo')}</span>
           <span>{t(language, 'skillRuleThree')}</span>
