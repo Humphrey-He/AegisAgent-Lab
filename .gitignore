@@ -1,0 +1,19 @@
+# Go
+bin/
+coverage.out
+
+# .NET
+**/bin/
+**/obj/
+
+# Rust
+target/
+Cargo.lock
+
+# Editors
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store

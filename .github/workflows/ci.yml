@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  go:
+    name: Go Runtime
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-service/go-runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: go test ./...
+
+  csharp:
+    name: C# API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-service/csharp-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet test AgentService.slnx
+
+  rust:
+    name: Rust Tools
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-service/rust-tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test

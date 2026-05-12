@@ -1,0 +1,10 @@
+[package]
+name = "code-indexer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+agent-common = { path = "../common" }
+
+[lib]
+path = "src/lib.rs"

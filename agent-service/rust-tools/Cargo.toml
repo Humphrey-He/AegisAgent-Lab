@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "crates/code-indexer",
+    "crates/common",
+    "crates/log-parser",
+    "crates/sandbox-runner"
+]
+resolver = "2"
