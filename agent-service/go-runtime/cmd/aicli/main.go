@@ -37,35 +37,19 @@ func main() {
 		path := args[1]
 		arguments := map[string]string{"path": path}
 
-		run.Record("tool.started", "read_file", arguments)
-		tool, result, err := registry.Execute("read_file", arguments)
-		call := tools.ToolCall{
-			Name:      "read_file",
-			RiskLevel: "unknown",
-			Arguments: arguments,
-			Status:    "started",
+		call := executeTool(registry, &run, "read_file", arguments)
+		response.Summary = summarizeCall(call, "read_file")
+		response.ToolCalls = append(response.ToolCalls, call)
+	}
+
+	if len(args) >= 1 && args[0] == "git_diff" {
+		diffArgs := "--stat"
+		if len(args) == 2 {
+			diffArgs = args[1]
 		}
-		if tool != nil {
-			call.Name = tool.Name()
-			call.RiskLevel = tool.RiskLevel()
-		}
-		if err != nil {
-			run.Record("tool.failed", "read_file", map[string]string{"error": err.Error()})
-			call.Status = "failed"
-			call.Error = err.Error()
-			response.Summary = "read_file failed."
-		} else {
-			bytes := "0"
-			if readFileResult, ok := result.(tools.ReadFileResult); ok {
-				bytes = fmt.Sprintf("%d", readFileResult.Bytes)
-				response.Summary = fmt.Sprintf("read_file completed for %s.", readFileResult.Path)
-			} else {
-				response.Summary = "read_file completed."
-			}
-			run.Record("tool.completed", "read_file", map[string]string{"bytes": bytes})
-			call.Status = "completed"
-			call.Result = result
-		}
+		arguments := map[string]string{"args": diffArgs}
+		call := executeTool(registry, &run, "git_diff", arguments)
+		response.Summary = summarizeCall(call, "git_diff")
 		response.ToolCalls = append(response.ToolCalls, call)
 	}
 
@@ -83,6 +67,50 @@ func main() {
 	printText(registry, run, response)
 }
 
+func executeTool(registry *tools.Registry, run *trace.Run, name string, arguments map[string]string) tools.ToolCall {
+	run.Record("tool.started", name, arguments)
+	tool, result, err := registry.Execute(name, arguments)
+	call := tools.ToolCall{
+		Name:      name,
+		RiskLevel: "unknown",
+		Arguments: arguments,
+		Status:    "started",
+	}
+	if tool != nil {
+		call.Name = tool.Name()
+		call.RiskLevel = tool.RiskLevel()
+	}
+	if err != nil {
+		run.Record("tool.failed", name, map[string]string{"error": err.Error()})
+		call.Status = "failed"
+		call.Error = err.Error()
+		return call
+	}
+
+	run.Record("tool.completed", name, map[string]string{"bytes": resultBytes(result)})
+	call.Status = "completed"
+	call.Result = result
+	return call
+}
+
+func resultBytes(result any) string {
+	switch value := result.(type) {
+	case tools.ReadFileResult:
+		return fmt.Sprintf("%d", value.Bytes)
+	case tools.GitDiffResult:
+		return fmt.Sprintf("%d", value.Bytes)
+	default:
+		return "0"
+	}
+}
+
+func summarizeCall(call tools.ToolCall, fallback string) string {
+	if call.Error != "" {
+		return fmt.Sprintf("%s failed.", fallback)
+	}
+	return fmt.Sprintf("%s completed.", call.Name)
+}
+
 func printText(registry *tools.Registry, run trace.Run, response tools.Response) {
 	fmt.Printf("AI CLI ready. tools=%d trace_id=%s\n", registry.Count(), run.ID)
 	for _, tool := range registry.List() {
@@ -96,6 +124,9 @@ func printText(registry *tools.Registry, run trace.Run, response tools.Response)
 		}
 		if result, ok := call.Result.(tools.ReadFileResult); ok {
 			fmt.Printf("read_file path=%s bytes=%d\n%s\n", result.Path, result.Bytes, result.Content)
+		}
+		if result, ok := call.Result.(tools.GitDiffResult); ok {
+			fmt.Printf("git_diff args=%s bytes=%d\n%s\n", result.Args, result.Bytes, result.Diff)
 		}
 	}
 

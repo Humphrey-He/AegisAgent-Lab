@@ -59,8 +59,9 @@ dotnet test AgentService.slnx
 
 - 新增统一 `Tool` 接口。
 - `ReadFileTool` 实现统一接口。
+- `GitDiffTool` 实现统一接口，支持只读 `git diff --stat`。
 - Registry 支持注册、查找和执行工具。
-- CLI 通过 Registry 执行 `read_file`。
+- CLI 通过 Registry 执行 `read_file` 和 `git_diff`。
 - JSON 输出保持第二期结构。
 
 验证命令：
@@ -68,6 +69,7 @@ dotnet test AgentService.slnx
 ```bash
 go test ./...
 go run ./cmd/aicli --json read_file go.mod
+go run ./cmd/aicli --json git_diff --stat
 ```
 
 结果：通过。`go run` 能输出结构化 JSON，包含 `summary`、`tool_calls`、`trace`、`risks`、`next_actions`。

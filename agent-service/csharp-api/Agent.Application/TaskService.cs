@@ -7,6 +7,28 @@ public sealed class TaskService
 {
     private readonly ConcurrentDictionary<Guid, AgentTask> tasks = new();
     private readonly ConcurrentDictionary<Guid, List<AgentTraceEvent>> traces = new();
+    private readonly ITaskStore store;
+
+    public TaskService()
+        : this(new InMemoryTaskStore())
+    {
+    }
+
+    public TaskService(ITaskStore store)
+    {
+        this.store = store;
+        var snapshot = store.Load();
+
+        foreach (var task in snapshot.Tasks)
+        {
+            tasks[task.Id] = task;
+        }
+
+        foreach (var trace in snapshot.Traces)
+        {
+            traces[trace.Key] = trace.Value.OrderBy(item => item.Sequence).ToList();
+        }
+    }
 
     public AgentTask Create(
         string input,
@@ -38,6 +60,7 @@ public sealed class TaskService
                 },
                 task.CreatedAt),
         };
+        Save();
         return task;
     }
 
@@ -114,6 +137,7 @@ public sealed class TaskService
                 new Dictionary<string, string>(attributes ?? new Dictionary<string, string>()),
                 DateTimeOffset.UtcNow);
             events.Add(traceEvent);
+            Save();
             return traceEvent;
         }
     }
@@ -144,8 +168,29 @@ public sealed class TaskService
             var next = update(current);
             if (tasks.TryUpdate(id, next, current))
             {
+                Save();
                 return next;
             }
         }
+    }
+
+    private void Save()
+    {
+        var taskSnapshot = tasks.Values
+            .OrderBy(task => task.CreatedAt)
+            .ToArray();
+        var traceSnapshot = traces.ToDictionary(
+            item => item.Key,
+            item =>
+            {
+                lock (item.Value)
+                {
+                    return (IReadOnlyCollection<AgentTraceEvent>)item.Value
+                        .OrderBy(trace => trace.Sequence)
+                        .ToArray();
+                }
+            });
+
+        store.Save(new TaskStoreSnapshot(taskSnapshot, traceSnapshot));
     }
 }

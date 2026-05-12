@@ -2,6 +2,11 @@ using Agent.Application;
 using Agent.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<ITaskStore>(_ =>
+{
+    var path = Path.Combine(AppContext.BaseDirectory, "data", "tasks.json");
+    return new JsonFileTaskStore(path);
+});
 builder.Services.AddSingleton<TaskService>();
 builder.Services.AddSingleton<IToolCommandRunner, ProcessToolCommandRunner>();
 builder.Services.AddSingleton<AgentExecutionService>();
@@ -42,6 +47,18 @@ app.MapGet("/tasks/{id:guid}/trace", (Guid id, TaskService tasks) =>
     return trace is null ? Results.NotFound() : Results.Ok(trace);
 });
 
+app.MapGet("/tasks/{id:guid}/trace/export", (Guid id, TaskService tasks) =>
+{
+    var task = tasks.Get(id);
+    var trace = tasks.GetTrace(id);
+    if (task is null || trace is null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(new TraceExportResponse(task.Id, task.Input, task.Status, task.RiskLevel, task.ApprovalStatus, trace));
+});
+
 app.MapPost("/tasks/{id:guid}/trace", (Guid id, AppendTraceRequest request, TaskService tasks) =>
 {
     var traceEvent = tasks.AppendTrace(
@@ -58,7 +75,7 @@ app.MapPost("/tasks/{id:guid}/execute", async (Guid id, ExecuteTaskApiRequest re
 {
     var result = await executor.ExecuteAsync(
         id,
-        new ExecuteTaskRequest(request.ReadFilePath, request.ScanRoot, request.ScanExtension, request.LogFilePath),
+        new ExecuteTaskRequest(request.ReadFilePath, request.ScanRoot, request.ScanExtension, request.LogFilePath, request.IncludeGitDiff),
         cancellationToken);
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
@@ -78,4 +95,13 @@ public sealed record ExecuteTaskApiRequest(
     string? ReadFilePath,
     string? ScanRoot,
     string? ScanExtension,
-    string? LogFilePath);
+    string? LogFilePath,
+    bool IncludeGitDiff);
+
+public sealed record TraceExportResponse(
+    Guid TaskId,
+    string Input,
+    AgentTaskStatus Status,
+    TaskRiskLevel RiskLevel,
+    ApprovalStatus ApprovalStatus,
+    IReadOnlyCollection<AgentTraceEvent> Trace);

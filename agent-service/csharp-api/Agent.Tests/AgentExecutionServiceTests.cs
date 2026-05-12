@@ -20,15 +20,18 @@ public sealed class AgentExecutionServiceTests
                 ReadFilePath: "go.mod",
                 ScanRoot: "crates",
                 ScanExtension: "rs",
-                LogFilePath: "sample.log"));
+                LogFilePath: "sample.log",
+                IncludeGitDiff: true));
 
         Assert.NotNull(result);
         Assert.Equal(AgentTaskStatus.Completed, result.Task.Status);
-        Assert.Equal(3, result.ToolResults.Count);
+        Assert.Equal(4, result.ToolResults.Count);
         Assert.Contains(result.Trace, trace => trace.Name == "execution.started");
         Assert.Contains(result.Trace, trace => trace.Name == "tool.started" && trace.ToolName == "go-read-file");
+        Assert.Contains(result.Trace, trace => trace.Name == "tool.completed" && trace.ToolName == "go-git-diff");
         Assert.Contains(result.Trace, trace => trace.Name == "tool.completed" && trace.ToolName == "rust-log-parser");
         Assert.Contains(runner.Commands, command => command.FileName == "go" && command.Arguments.Contains("read_file"));
+        Assert.Contains(runner.Commands, command => command.FileName == "go" && command.Arguments.Contains("git_diff"));
         Assert.Contains(runner.Commands, command => command.FileName == "cargo" && command.Arguments.Contains("code-indexer"));
         Assert.Contains(runner.Commands, command => command.FileName == "cargo" && command.Arguments.Contains("log-parser"));
     }

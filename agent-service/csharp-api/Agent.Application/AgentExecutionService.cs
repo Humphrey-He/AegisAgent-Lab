@@ -6,7 +6,8 @@ public sealed record ExecuteTaskRequest(
     string? ReadFilePath = null,
     string? ScanRoot = null,
     string? ScanExtension = null,
-    string? LogFilePath = null);
+    string? LogFilePath = null,
+    bool IncludeGitDiff = false);
 
 public sealed record ExecuteTaskResult(
     AgentTask Task,
@@ -76,6 +77,17 @@ public sealed class AgentExecutionService
                     "go-read-file",
                     "go",
                     $"run ./cmd/aicli --json read_file {Quote(request.ReadFilePath)}",
+                    goRuntimeDirectory,
+                    cancellationToken));
+            }
+
+            if (request.IncludeGitDiff)
+            {
+                results.Add(await RunToolAsync(
+                    taskId,
+                    "go-git-diff",
+                    "go",
+                    "run ./cmd/aicli --json git_diff --stat",
                     goRuntimeDirectory,
                     cancellationToken));
             }

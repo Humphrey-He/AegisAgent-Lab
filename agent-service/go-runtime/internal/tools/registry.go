@@ -18,6 +18,7 @@ func NewRegistry() *Registry {
 		tools: make(map[string]Tool),
 	}
 	registry.Register(ReadFileTool{Root: "."})
+	registry.Register(GitDiffTool{Root: "."})
 	return registry
 }
 

@@ -5,6 +5,7 @@ coverage.out
 # .NET
 **/bin/
 **/obj/
+agent-service/csharp-api/Agent.Api/data/
 
 # Rust
 target/
