@@ -67,6 +67,36 @@ export type TaskPlanResult = {
   modelResponse: ModelResponse
 }
 
+export type WorkspaceConfig = {
+  root: string
+  maxFileSizeBytes: number
+  allowedExtensions: string[]
+}
+
+export type WorkspaceFileItem = {
+  path: string
+  name: string
+  extension: string
+  sizeBytes: number
+  updatedAt?: string
+}
+
+export type WorkspaceFilesResponse = {
+  root: string
+  files: WorkspaceFileItem[]
+}
+
+export type WorkspaceFileResponse = {
+  path: string
+  name: string
+  extension: string
+  sizeBytes: number
+  content?: string
+  isBinary?: boolean
+  tooLarge?: boolean
+  message?: string
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -138,6 +168,23 @@ export function getTrace(id: string) {
 
 export function exportTrace(id: string) {
   return request<TraceExportResponse>(`/tasks/${id}/trace/export`)
+}
+
+export function getWorkspaceConfig() {
+  return request<WorkspaceConfig>('/workspace/config')
+}
+
+export function listWorkspaceFiles(params: { root?: string; ext?: string; maxDepth?: number } = {}) {
+  const query = new URLSearchParams()
+  if (params.root) query.set('root', params.root)
+  if (params.ext) query.set('ext', params.ext)
+  if (params.maxDepth) query.set('maxDepth', String(params.maxDepth))
+  const suffix = query.toString() ? `?${query}` : ''
+  return request<WorkspaceFilesResponse>(`/workspace/files${suffix}`)
+}
+
+export function getWorkspaceFile(path: string) {
+  return request<WorkspaceFileResponse>(`/workspace/file?path=${encodeURIComponent(path)}`)
 }
 
 export function getSkillDirectory() {

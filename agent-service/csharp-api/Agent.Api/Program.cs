@@ -22,6 +22,7 @@ builder.Services.AddSingleton(_ =>
     var path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "data", "skills");
     return new SkillFileStore(path);
 });
+builder.Services.AddSingleton<WorkspaceFileStore>();
 
 var app = builder.Build();
 
@@ -101,6 +102,49 @@ app.MapPost("/tasks/{id:guid}/plan", async (Guid id, AgentPlanningService planni
 
 app.MapGet("/skills/directory", (SkillFileStore skills) =>
     Results.Ok(new SkillDirectoryResponse(skills.DefaultDirectory)));
+
+app.MapGet("/workspace/config", (WorkspaceFileStore workspace) =>
+    Results.Ok(workspace.GetConfig()));
+
+app.MapGet("/workspace/files", (string? root, string? ext, int? maxDepth, WorkspaceFileStore workspace) =>
+{
+    try
+    {
+        return Results.Ok(workspace.List(root, ext, maxDepth));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (DirectoryNotFoundException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/workspace/file", (string path, WorkspaceFileStore workspace) =>
+{
+    try
+    {
+        return Results.Ok(workspace.Read(path));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+    catch (FileNotFoundException ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
 
 app.MapGet("/skills/directories", (string? directory, SkillFileStore skills) =>
 {

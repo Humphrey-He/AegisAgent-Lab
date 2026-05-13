@@ -8,10 +8,13 @@ import {
   Code2,
   Copy,
   Download,
+  ExternalLink,
   FileJson,
+  FileText,
   GitBranch,
   Gauge,
   Globe2,
+  Monitor,
   ListChecks,
   Play,
   RefreshCw,
@@ -19,6 +22,8 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Smartphone,
+  Tablet,
   X,
 } from 'lucide-react'
 import {
@@ -31,8 +36,11 @@ import {
   getSkillDirectories,
   getTask,
   getTrace,
+  getWorkspaceConfig,
+  getWorkspaceFile,
   listSkillFiles,
   listTasks,
+  listWorkspaceFiles,
   planTask,
   rejectTask,
   saveSkillFile,
@@ -41,6 +49,9 @@ import {
   type ModelTestResult,
   type SkillDirectoryOptionsResponse,
   type SkillFileRecord,
+  type WorkspaceConfig,
+  type WorkspaceFileItem,
+  type WorkspaceFileResponse,
 } from './api'
 import { type GlossaryTerm, getGlossaryText } from './glossary'
 import { t, type Language } from './i18n'
@@ -64,7 +75,7 @@ const toolCatalog = [
 
 const riskOptions: RiskLevel[] = ['Low', 'Medium', 'High']
 
-type View = 'dashboard' | 'tasks' | 'detail' | 'tools' | 'docs' | 'skills' | 'ai'
+type View = 'dashboard' | 'tasks' | 'detail' | 'tools' | 'workspace' | 'preview' | 'docs' | 'skills' | 'ai'
 
 type TaskTemplate = {
   id: string
@@ -311,6 +322,8 @@ function App() {
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Gauge size={18} />} label={t(language, 'navDashboard')} />
           <NavButton active={view === 'tasks'} onClick={() => setView('tasks')} icon={<ClipboardList size={18} />} label={t(language, 'navTasks')} />
           <NavButton active={view === 'tools'} onClick={() => setView('tools')} icon={<Code2 size={18} />} label={t(language, 'navTools')} />
+          <NavButton active={view === 'workspace'} onClick={() => setView('workspace')} icon={<FileText size={18} />} label={t(language, 'navWorkspace')} />
+          <NavButton active={view === 'preview'} onClick={() => setView('preview')} icon={<Monitor size={18} />} label={t(language, 'navPreview')} />
           <NavButton active={view === 'ai'} onClick={() => setView('ai')} icon={<Sparkles size={18} />} label={t(language, 'navAI')} />
           <NavButton active={view === 'docs'} onClick={() => setView('docs')} icon={<BookOpen size={18} />} label={t(language, 'navDocs')} />
           <NavButton active={view === 'skills'} onClick={() => setView('skills')} icon={<Sparkles size={18} />} label={t(language, 'navSkills')} />
@@ -382,6 +395,8 @@ function App() {
         )}
 
         {view === 'tools' && <ToolsView language={language} />}
+        {view === 'workspace' && <WorkspaceView language={language} setNotice={setNotice} />}
+        {view === 'preview' && <PreviewView language={language} />}
         {view === 'ai' && <AiView language={language} config={modelConfig} setNotice={setNotice} />}
         {view === 'docs' && <DocsView language={language} />}
         {view === 'skills' && <SkillsView language={language} setNotice={setNotice} />}
@@ -862,6 +877,183 @@ function ToolsView({ language }: { language: Language }) {
           <li>{t(language, 'toolBoundaryTrace')}</li>
           <li>{t(language, 'toolBoundaryNoWrite')}</li>
         </ul>
+      </section>
+    </div>
+  )
+}
+
+function WorkspaceView({ language, setNotice }: { language: Language; setNotice: (notice: string) => void }) {
+  const [config, setConfig] = useState<WorkspaceConfig | null>(null)
+  const [files, setFiles] = useState<WorkspaceFileItem[]>([])
+  const [selectedFile, setSelectedFile] = useState<WorkspaceFileResponse | null>(null)
+  const [root, setRoot] = useState('docs')
+  const [extension, setExtension] = useState('md')
+  const [busy, setBusy] = useState(false)
+
+  const loadFiles = useCallback(async () => {
+    setBusy(true)
+    try {
+      const [configResult, fileResult] = await Promise.all([
+        getWorkspaceConfig(),
+        listWorkspaceFiles({ root: root.trim() || undefined, ext: extension.trim() || undefined, maxDepth: 5 }),
+      ])
+      setConfig(configResult)
+      setFiles(fileResult.files)
+      setNotice(t(language, 'workspaceLoaded'))
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }, [extension, language, root, setNotice])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void loadFiles()
+    }, 0)
+    return () => window.clearTimeout(handle)
+  }, [loadFiles])
+
+  async function openFile(path: string) {
+    setBusy(true)
+    try {
+      const file = await getWorkspaceFile(path)
+      setSelectedFile(file)
+      setNotice(`${t(language, 'fileLoaded')}: ${path}`)
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="workspace-browser">
+      <section className="panel file-list-panel">
+        <div className="section-title">
+          <h2>{t(language, 'workspaceFiles')}</h2>
+          <button disabled={busy} onClick={() => void loadFiles()}>
+            <RefreshCw size={16} /> {t(language, 'refresh')}
+          </button>
+        </div>
+        <div className="workspace-filters">
+          <label>
+            {t(language, 'workspaceRoot')}
+            <input value={root} onChange={(event) => setRoot(event.target.value)} placeholder="docs" />
+          </label>
+          <label>
+            {t(language, 'workspaceExtension')}
+            <input value={extension} onChange={(event) => setExtension(event.target.value)} placeholder="md" />
+          </label>
+        </div>
+        <div className="workspace-config">
+          <small>{t(language, 'workspaceRootPath')}</small>
+          <code>{config?.root ?? '-'}</code>
+          <small>{t(language, 'workspaceLimit')}: {config?.maxFileSizeBytes ?? '-'}</small>
+        </div>
+        <div className="file-list">
+          {files.map((file) => (
+            <button
+              className={selectedFile?.path === file.path ? 'file-row selected' : 'file-row'}
+              key={file.path}
+              onClick={() => void openFile(file.path)}
+              type="button"
+            >
+              <FileText size={15} />
+              <span>{file.path}</span>
+              <small>{formatBytes(file.sizeBytes)}</small>
+            </button>
+          ))}
+          {files.length === 0 && <p className="muted">{t(language, 'noWorkspaceFiles')}</p>}
+        </div>
+      </section>
+
+      <section className="panel file-preview-panel">
+        <div className="section-title">
+          <h2>{selectedFile?.path ?? t(language, 'filePreview')}</h2>
+          <div className="button-row">
+            <button disabled={!selectedFile} onClick={() => selectedFile && void copyText(selectedFile.path)}>
+              <Copy size={16} /> {t(language, 'copyPath')}
+            </button>
+            <button disabled={!selectedFile?.content} onClick={() => selectedFile?.content && void copyText(selectedFile.content)}>
+              <Copy size={16} /> {t(language, 'copyContent')}
+            </button>
+          </div>
+        </div>
+        {selectedFile ? <FilePreview language={language} file={selectedFile} /> : <p className="muted">{t(language, 'selectFileToPreview')}</p>}
+      </section>
+    </div>
+  )
+}
+
+function FilePreview({ language, file }: { language: Language; file: WorkspaceFileResponse }) {
+  if (file.tooLarge) {
+    return <p className="muted">{file.message ?? t(language, 'fileTooLarge')}</p>
+  }
+  if (file.isBinary) {
+    return <p className="muted">{t(language, 'binaryFileBlocked')}</p>
+  }
+  if (!file.content) {
+    return <p className="muted">{t(language, 'emptyFile')}</p>
+  }
+  if (file.extension.toLowerCase() === 'md') {
+    return (
+      <div className="markdown-preview">
+        {file.content.split(/\n{2,}/).map((block, index) => renderMarkdownBlock(block, index))}
+      </div>
+    )
+  }
+  return (
+    <pre className="code-preview">
+      {file.content.split('\n').map((line, index) => `${String(index + 1).padStart(4, ' ')}  ${line}`).join('\n')}
+    </pre>
+  )
+}
+
+function PreviewView({ language }: { language: Language }) {
+  const [url, setUrl] = useState('http://localhost:5173')
+  const [frameUrl, setFrameUrl] = useState('http://localhost:5173')
+  const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
+
+  const width = device === 'desktop' ? 1440 : device === 'tablet' ? 768 : 390
+
+  return (
+    <div className="preview-layout">
+      <section className="panel preview-toolbar">
+        <div className="section-title">
+          <h2>{t(language, 'uiPreview')}</h2>
+          <div className="button-row">
+            <button onClick={() => setFrameUrl(url)}>
+              <RefreshCw size={16} /> {t(language, 'refreshPreview')}
+            </button>
+            <button onClick={() => window.open(frameUrl, '_blank', 'noopener,noreferrer')}>
+              <ExternalLink size={16} /> {t(language, 'openNewWindow')}
+            </button>
+          </div>
+        </div>
+        <div className="preview-controls">
+          <label>
+            {t(language, 'previewUrl')}
+            <input value={url} onChange={(event) => setUrl(event.target.value)} />
+          </label>
+          <div className="device-switcher">
+            <button className={device === 'desktop' ? 'selected' : ''} onClick={() => setDevice('desktop')} type="button">
+              <Monitor size={16} /> Desktop
+            </button>
+            <button className={device === 'tablet' ? 'selected' : ''} onClick={() => setDevice('tablet')} type="button">
+              <Tablet size={16} /> Tablet
+            </button>
+            <button className={device === 'mobile' ? 'selected' : ''} onClick={() => setDevice('mobile')} type="button">
+              <Smartphone size={16} /> Mobile
+            </button>
+          </div>
+        </div>
+        <p className="field-hint">{t(language, 'previewReadonlyHint')}</p>
+      </section>
+      <section className="preview-stage">
+        <div className="preview-frame-shell" style={{ width: `${width}px` }}>
+          <iframe title={t(language, 'uiPreview')} src={frameUrl} />
+        </div>
       </section>
     </div>
   )
@@ -1512,10 +1704,34 @@ function titleForView(view: View, language: Language) {
   if (view === 'tasks') return t(language, 'tasks')
   if (view === 'detail') return t(language, 'taskDetail')
   if (view === 'tools') return t(language, 'tools')
+  if (view === 'workspace') return t(language, 'workspace')
+  if (view === 'preview') return t(language, 'preview')
   if (view === 'ai') return t(language, 'aiGateway')
   if (view === 'docs') return t(language, 'docs')
   if (view === 'skills') return t(language, 'skills')
   return t(language, 'dashboard')
+}
+
+function renderMarkdownBlock(block: string, index: number) {
+  const trimmed = block.trim()
+  if (trimmed.startsWith('### ')) return <h3 key={index}>{trimmed.slice(4)}</h3>
+  if (trimmed.startsWith('## ')) return <h2 key={index}>{trimmed.slice(3)}</h2>
+  if (trimmed.startsWith('# ')) return <h1 key={index}>{trimmed.slice(2)}</h1>
+  if (trimmed.startsWith('```')) return <pre key={index}>{trimmed.replace(/^```[a-z]*\n?/i, '').replace(/```$/, '')}</pre>
+  if (trimmed.startsWith('- ')) {
+    return (
+      <ul key={index}>
+        {trimmed.split('\n').map((line) => <li key={line}>{line.replace(/^- /, '')}</li>)}
+      </ul>
+    )
+  }
+  return <p key={index}>{trimmed}</p>
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
 function toMessage(error: unknown) {
