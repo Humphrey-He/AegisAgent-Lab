@@ -15,6 +15,8 @@ builder.Services.AddSingleton<ITaskStore>(_ =>
 builder.Services.AddSingleton<TaskService>();
 builder.Services.AddSingleton<IToolCommandRunner, ProcessToolCommandRunner>();
 builder.Services.AddSingleton<AgentExecutionService>();
+builder.Services.AddHttpClient<IModelClient, OpenAiCompatibleModelClient>();
+builder.Services.AddSingleton<AgentPlanningService>();
 builder.Services.AddSingleton(_ =>
 {
     var path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "data", "skills");
@@ -24,6 +26,21 @@ builder.Services.AddSingleton(_ =>
 var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+app.MapGet("/models/config", (AgentPlanningService planning) =>
+    Results.Ok(planning.GetConfig()));
+
+app.MapPost("/models/test", async (AgentPlanningService planning, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await planning.TestAsync(cancellationToken));
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message, config = planning.GetConfig() });
+    }
+});
 
 app.MapGet("/tasks", (TaskService tasks) => Results.Ok(tasks.List()));
 
@@ -67,6 +84,19 @@ app.MapGet("/tasks/{id:guid}/trace/export", (Guid id, TaskService tasks) =>
     }
 
     return Results.Ok(new TraceExportResponse(task.Id, task.Input, task.Status, task.RiskLevel, task.ApprovalStatus, trace));
+});
+
+app.MapPost("/tasks/{id:guid}/plan", async (Guid id, AgentPlanningService planning, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await planning.PlanTaskAsync(id, cancellationToken);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message, config = planning.GetConfig() });
+    }
 });
 
 app.MapGet("/skills/directory", (SkillFileStore skills) =>

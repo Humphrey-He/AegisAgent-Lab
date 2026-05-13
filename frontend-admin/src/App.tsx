@@ -26,13 +26,18 @@ import {
   executeTask,
   exportTrace,
   getHealth,
+  getModelConfig,
   getSkillDirectories,
   getTask,
   getTrace,
   listSkillFiles,
   listTasks,
+  planTask,
   rejectTask,
   saveSkillFile,
+  testModel,
+  type ModelConfig,
+  type ModelTestResult,
   type SkillDirectoryOptionsResponse,
   type SkillFileRecord,
 } from './api'
@@ -58,7 +63,7 @@ const toolCatalog = [
 
 const riskOptions: RiskLevel[] = ['Low', 'Medium', 'High']
 
-type View = 'dashboard' | 'tasks' | 'detail' | 'tools' | 'docs' | 'skills'
+type View = 'dashboard' | 'tasks' | 'detail' | 'tools' | 'docs' | 'skills' | 'ai'
 
 function App() {
   const [language, setLanguage] = useState<Language>('zh')
@@ -69,6 +74,7 @@ function App() {
   const [trace, setTrace] = useState<AgentTraceEvent[]>([])
   const [traceExport, setTraceExport] = useState<TraceExportResponse | null>(null)
   const [toolResults, setToolResults] = useState<ToolCommandResult[]>([])
+  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null)
   const [health, setHealth] = useState('unknown')
   const [notice, setNotice] = useState(t(language, 'ready'))
   const [loading, setLoading] = useState(false)
@@ -98,9 +104,10 @@ function App() {
   const refreshAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [healthResult, taskResult] = await Promise.all([getHealth(), listTasks()])
+      const [healthResult, taskResult, modelResult] = await Promise.all([getHealth(), listTasks(), getModelConfig()])
       setHealth(healthResult.status)
       setTasks(sortTasks(taskResult))
+      setModelConfig(modelResult)
       setNotice(t(language, 'synced'))
     } catch (error) {
       setNotice(toMessage(error))
@@ -204,6 +211,22 @@ function App() {
     }
   }
 
+  async function handlePlanTask() {
+    if (!selectedTask) return
+    setLoading(true)
+    try {
+      const result = await planTask(selectedTask.id)
+      setSelectedTask(result.task)
+      setTrace(result.trace)
+      setNotice(t(language, 'aiPlanDone'))
+      await refreshAll()
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -220,6 +243,7 @@ function App() {
           <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<Gauge size={18} />} label={t(language, 'navDashboard')} />
           <NavButton active={view === 'tasks'} onClick={() => setView('tasks')} icon={<ClipboardList size={18} />} label={t(language, 'navTasks')} />
           <NavButton active={view === 'tools'} onClick={() => setView('tools')} icon={<Code2 size={18} />} label={t(language, 'navTools')} />
+          <NavButton active={view === 'ai'} onClick={() => setView('ai')} icon={<Sparkles size={18} />} label={t(language, 'navAI')} />
           <NavButton active={view === 'docs'} onClick={() => setView('docs')} icon={<BookOpen size={18} />} label={t(language, 'navDocs')} />
           <NavButton active={view === 'skills'} onClick={() => setView('skills')} icon={<Sparkles size={18} />} label={t(language, 'navSkills')} />
         </nav>
@@ -285,10 +309,12 @@ function App() {
             onReject={() => void mutateTask(() => rejectTask(selectedTask.id), t(language, 'taskRejected'))}
             onExecute={(payload) => void handleExecute(payload)}
             onExportTrace={() => void handleExportTrace()}
+            onPlanTask={() => void handlePlanTask()}
           />
         )}
 
         {view === 'tools' && <ToolsView language={language} />}
+        {view === 'ai' && <AiView language={language} config={modelConfig} setNotice={setNotice} />}
         {view === 'docs' && <DocsView language={language} />}
         {view === 'skills' && <SkillsView language={language} setNotice={setNotice} />}
       </section>
@@ -478,6 +504,7 @@ function TaskDetail({
   onReject,
   onExecute,
   onExportTrace,
+  onPlanTask,
 }: {
   language: Language
   task: AgentTask
@@ -489,6 +516,7 @@ function TaskDetail({
   onReject: () => void
   onExecute: (payload: ExecuteTaskRequest) => void
   onExportTrace: () => void
+  onPlanTask: () => void
 }) {
   return (
     <div className="content-grid">
@@ -496,6 +524,9 @@ function TaskDetail({
         <div className="section-title">
           <h2>{t(language, 'taskDetail')}</h2>
           <div className="button-row">
+            <button onClick={onPlanTask}>
+              <Sparkles size={16} /> {t(language, 'runAiPlan')}
+            </button>
             <button onClick={onApprove} disabled={task.approvalStatus !== 'Pending'}>
               <Check size={16} /> {t(language, 'approve')}
             </button>
@@ -515,6 +546,14 @@ function TaskDetail({
           <p>{task.input}</p>
           <small>{t(language, 'requestedBy')} {task.requestedBy} · {formatDate(task.createdAt)}</small>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-title">
+          <h2>{t(language, 'aiPlan')}</h2>
+          <Sparkles size={18} />
+        </div>
+        <p className="lead-text">{t(language, 'aiPlanHint')}</p>
       </section>
 
       <ExecutePanel language={language} onExecute={onExecute} />
@@ -661,6 +700,62 @@ function ToolsView({ language }: { language: Language }) {
           <li>{t(language, 'toolBoundaryTrace')}</li>
           <li>{t(language, 'toolBoundaryNoWrite')}</li>
         </ul>
+      </section>
+    </div>
+  )
+}
+
+function AiView({
+  language,
+  config,
+  setNotice,
+}: {
+  language: Language
+  config: ModelConfig | null
+  setNotice: (notice: string) => void
+}) {
+  const [result, setResult] = useState<ModelTestResult | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function runTest() {
+    setBusy(true)
+    try {
+      const response = await testModel()
+      setResult(response)
+      setNotice(t(language, 'modelTestDone'))
+    } catch (error) {
+      setNotice(toMessage(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="content-grid">
+      <section className="panel">
+        <div className="section-title">
+          <h2>{t(language, 'aiConfig')}</h2>
+          <Sparkles size={18} />
+        </div>
+        <div className="model-config-grid">
+          <StatusBlock label={t(language, 'aiProvider')} value={config?.provider ?? '-'} tone="neutral" />
+          <StatusBlock label={t(language, 'aiModel')} value={config?.model ?? '-'} tone="neutral" />
+          <StatusBlock label={t(language, 'aiKeyConfigured')} value={config?.apiKeyConfigured ? t(language, 'aiKeyReady') : t(language, 'aiKeyMissing')} tone={config?.apiKeyConfigured ? 'success' : 'warning'} />
+        </div>
+        <div className="detail-copy">
+          <span>{t(language, 'aiEndpoint')}</span>
+          <p>{config?.endpoint ?? '-'}</p>
+        </div>
+      </section>
+
+      <section className="panel wide">
+        <div className="section-title">
+          <h2>{t(language, 'aiGateway')}</h2>
+          <button disabled={busy} onClick={() => void runTest()}>
+            <Sparkles size={16} /> {t(language, 'testModel')}
+          </button>
+        </div>
+        <JsonViewer language={language} value={result ?? { message: t(language, 'testResult') }} />
       </section>
     </div>
   )
@@ -1061,6 +1156,7 @@ function titleForView(view: View, language: Language) {
   if (view === 'tasks') return t(language, 'tasks')
   if (view === 'detail') return t(language, 'taskDetail')
   if (view === 'tools') return t(language, 'tools')
+  if (view === 'ai') return t(language, 'aiGateway')
   if (view === 'docs') return t(language, 'docs')
   if (view === 'skills') return t(language, 'skills')
   return t(language, 'dashboard')

@@ -28,6 +28,18 @@
 - API 代理：Vite dev server 将 `/api` 代理到 `http://localhost:5055`。
 - 后端契约：C# API 增加 `JsonStringEnumConverter`，确保枚举以字符串形式输出，匹配前端类型与产品文档。
 - Skill 文件存储：C# API 提供 `GET /skills/directory`、`GET /skills`、`POST /skills`，默认保存到 API `data/skills` 目录；前端可以指定保存目录，后端会限制目录必须位于仓库或当前用户目录下。
+- Cloud AI MVP：C# API 提供 `GET /models/config`、`POST /models/test`、`POST /tasks/{id}/plan`，通过环境变量读取 OpenAI-compatible endpoint 和 API Key；前端新增云 AI 面板和任务详情 AI Plan 入口。
+
+## 云 AI 配置
+
+```powershell
+$env:AI_PROVIDER="OpenAICompatible"
+$env:AI_ENDPOINT="https://api.openai.com/v1"
+$env:AI_API_KEY="sk-..."
+$env:AI_MODEL="gpt-4.1-mini"
+```
+
+API Key 只在后端环境变量中读取，前端只展示是否已配置。
 
 ## 本地启动
 

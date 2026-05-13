@@ -38,6 +38,35 @@ export type SkillDirectoryOptionsResponse = {
   children: SkillDirectoryOption[]
 }
 
+export type ModelConfig = {
+  provider: string
+  endpoint: string
+  model: string
+  apiKeyConfigured: boolean
+}
+
+export type ModelTestResult = {
+  config: ModelConfig
+  content: string
+  latencyMs: number
+  totalTokens?: number
+}
+
+export type ModelResponse = {
+  provider: string
+  endpoint: string
+  model: string
+  content: string
+  latencyMs: number
+  totalTokens?: number
+}
+
+export type TaskPlanResult = {
+  task: AgentTask
+  trace: AgentTraceEvent[]
+  modelResponse: ModelResponse
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -59,6 +88,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth() {
   return request<{ status: string }>('/health')
+}
+
+export function getModelConfig() {
+  return request<ModelConfig>('/models/config')
+}
+
+export function testModel() {
+  return request<ModelTestResult>('/models/test', { method: 'POST' })
 }
 
 export function listTasks() {
@@ -89,6 +126,10 @@ export function executeTask(id: string, payload: ExecuteTaskRequest) {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export function planTask(id: string) {
+  return request<TaskPlanResult>(`/tasks/${id}/plan`, { method: 'POST' })
 }
 
 export function getTrace(id: string) {
