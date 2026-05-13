@@ -26,13 +26,14 @@ import {
   executeTask,
   exportTrace,
   getHealth,
-  getSkillDirectory,
+  getSkillDirectories,
   getTask,
   getTrace,
   listSkillFiles,
   listTasks,
   rejectTask,
   saveSkillFile,
+  type SkillDirectoryOptionsResponse,
   type SkillFileRecord,
 } from './api'
 import { type GlossaryTerm, getGlossaryText } from './glossary'
@@ -760,6 +761,7 @@ function DocsView({ language }: { language: Language }) {
 
 function SkillsView({ language, setNotice }: { language: Language; setNotice: (notice: string) => void }) {
   const [skills, setSkills] = useState<SkillFileRecord[]>([])
+  const [directoryOptions, setDirectoryOptions] = useState<SkillDirectoryOptionsResponse | null>(null)
   const [directory, setDirectory] = useState('')
   const [url, setUrl] = useState('')
   const [name, setName] = useState('New Skill')
@@ -770,7 +772,10 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
   const reloadSkills = useCallback(async (targetDirectory = directory) => {
     setBusy(true)
     try {
-      const files = await listSkillFiles(targetDirectory || undefined)
+      const options = await getSkillDirectories(targetDirectory || undefined)
+      const files = await listSkillFiles(options.currentDirectory)
+      setDirectoryOptions(options)
+      setDirectory(options.currentDirectory)
       setSkills(files)
       setNotice(t(language, 'directoryLoaded'))
     } catch (error) {
@@ -785,9 +790,10 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
       async function loadDirectory() {
         setBusy(true)
         try {
-          const result = await getSkillDirectory()
-          setDirectory(result.directory)
-          const files = await listSkillFiles(result.directory)
+          const result = await getSkillDirectories()
+          setDirectory(result.currentDirectory)
+          setDirectoryOptions(result)
+          const files = await listSkillFiles(result.currentDirectory)
           setSkills(files)
           setNotice(t(language, 'directoryLoaded'))
         } catch (error) {
@@ -854,11 +860,13 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
           <Sparkles size={18} />
         </div>
         <div className="stack-form">
-          <label>
-            {t(language, 'skillDirectory')}
-            <input value={directory} onChange={(event) => setDirectory(event.target.value)} />
-            <small className="field-hint">{t(language, 'skillDirectoryHint')}</small>
-          </label>
+          <DirectoryPicker
+            language={language}
+            directory={directory}
+            options={directoryOptions}
+            busy={busy}
+            onSelect={(path) => void reloadSkills(path)}
+          />
           <label>
             {t(language, 'skillHubUrl')}
             <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/SKILL.md" />
@@ -915,6 +923,65 @@ function SkillsView({ language, setNotice }: { language: Language; setNotice: (n
           {skills.length === 0 && <p className="muted">{t(language, 'noSkills')}</p>}
         </div>
       </section>
+    </div>
+  )
+}
+
+function DirectoryPicker({
+  language,
+  directory,
+  options,
+  busy,
+  onSelect,
+}: {
+  language: Language
+  directory: string
+  options: SkillDirectoryOptionsResponse | null
+  busy: boolean
+  onSelect: (path: string) => void
+}) {
+  return (
+    <div className="directory-picker">
+      <div>
+        <strong>{t(language, 'skillDirectory')}</strong>
+        <small>{t(language, 'skillDirectoryHint')}</small>
+      </div>
+      <code>{directory || options?.defaultDirectory || '-'}</code>
+      <div className="directory-section">
+        <span>{t(language, 'skillDirectoryRoots')}</span>
+        <div className="directory-options">
+          {options?.roots.map((option) => (
+            <button
+              className={option.path === directory ? 'selected' : ''}
+              disabled={busy}
+              key={option.path}
+              onClick={() => onSelect(option.path)}
+              type="button"
+            >
+              {option.name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="directory-section">
+        <span>{t(language, 'skillDirectoryChildren')}</span>
+        <div className="directory-options">
+          {options && options.children.length > 0 ? (
+            options.children.map((option) => (
+              <button
+                disabled={busy}
+                key={option.path}
+                onClick={() => onSelect(option.path)}
+                type="button"
+              >
+                {option.name}
+              </button>
+            ))
+          ) : (
+            <small className="field-hint">{t(language, 'noChildDirectories')}</small>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

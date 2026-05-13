@@ -72,6 +72,18 @@ app.MapGet("/tasks/{id:guid}/trace/export", (Guid id, TaskService tasks) =>
 app.MapGet("/skills/directory", (SkillFileStore skills) =>
     Results.Ok(new SkillDirectoryResponse(skills.DefaultDirectory)));
 
+app.MapGet("/skills/directories", (string? directory, SkillFileStore skills) =>
+{
+    try
+    {
+        return Results.Ok(skills.GetDirectoryOptions(directory));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.MapGet("/skills", (string? directory, SkillFileStore skills) =>
 {
     try

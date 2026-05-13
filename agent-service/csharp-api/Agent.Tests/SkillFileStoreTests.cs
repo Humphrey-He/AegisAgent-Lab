@@ -46,6 +46,21 @@ public sealed class SkillFileStoreTests : IDisposable
         Assert.Contains("outside allowed roots", error.Message);
     }
 
+    [Fact]
+    public void GetDirectoryOptionsReturnsRootsAndChildren()
+    {
+        var defaultDirectory = Path.Combine(root, "default");
+        var childDirectory = Path.Combine(defaultDirectory, "team-skills");
+        Directory.CreateDirectory(childDirectory);
+        var store = new SkillFileStore(defaultDirectory, new[] { root });
+
+        var options = store.GetDirectoryOptions(defaultDirectory);
+
+        Assert.Equal(defaultDirectory, options.CurrentDirectory);
+        Assert.Contains(options.Roots, option => option.Path == root && option.IsRoot);
+        Assert.Contains(options.Children, option => option.Path == childDirectory && !option.IsRoot);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(root))

@@ -18,6 +18,17 @@ public sealed record SaveSkillFileRequest(
 
 public sealed record SkillDirectoryResponse(string Directory);
 
+public sealed record SkillDirectoryOption(
+    string Path,
+    string Name,
+    bool IsRoot);
+
+public sealed record SkillDirectoryOptionsResponse(
+    string DefaultDirectory,
+    string CurrentDirectory,
+    IReadOnlyCollection<SkillDirectoryOption> Roots,
+    IReadOnlyCollection<SkillDirectoryOption> Children);
+
 public sealed class SkillFileStore
 {
     private readonly string defaultDirectory;
@@ -32,6 +43,23 @@ public sealed class SkillFileStore
     }
 
     public string DefaultDirectory => defaultDirectory;
+
+    public SkillDirectoryOptionsResponse GetDirectoryOptions(string? directory = null)
+    {
+        var currentDirectory = ResolveDirectory(directory);
+        Directory.CreateDirectory(currentDirectory);
+
+        var roots = allowedRoots
+            .Select(root => new SkillDirectoryOption(root, DisplayName(root), true))
+            .ToArray();
+        var children = Directory
+            .EnumerateDirectories(currentDirectory, "*", SearchOption.TopDirectoryOnly)
+            .OrderBy(Path.GetFileName)
+            .Select(child => new SkillDirectoryOption(child, DisplayName(child), false))
+            .ToArray();
+
+        return new SkillDirectoryOptionsResponse(defaultDirectory, currentDirectory, roots, children);
+    }
 
     public SkillFileRecord Save(SaveSkillFileRequest request)
     {
@@ -145,6 +173,12 @@ public sealed class SkillFileStore
     {
         var hash = HashCode.Combine(name, source, content).ToString("x");
         return $"{SanitizeFileName(name)}-{hash}";
+    }
+
+    private static string DisplayName(string path)
+    {
+        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.IsNullOrWhiteSpace(name) ? path : name;
     }
 
     private static string ResolveRepositoryRoot()

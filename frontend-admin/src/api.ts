@@ -25,6 +25,19 @@ export type SaveSkillFilePayload = {
   directory?: string
 }
 
+export type SkillDirectoryOption = {
+  path: string
+  name: string
+  isRoot: boolean
+}
+
+export type SkillDirectoryOptionsResponse = {
+  defaultDirectory: string
+  currentDirectory: string
+  roots: SkillDirectoryOption[]
+  children: SkillDirectoryOption[]
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -88,6 +101,11 @@ export function exportTrace(id: string) {
 
 export function getSkillDirectory() {
   return request<{ directory: string }>('/skills/directory')
+}
+
+export function getSkillDirectories(directory?: string) {
+  const query = directory ? `?directory=${encodeURIComponent(directory)}` : ''
+  return request<SkillDirectoryOptionsResponse>(`/skills/directories${query}`)
 }
 
 export function listSkillFiles(directory?: string) {

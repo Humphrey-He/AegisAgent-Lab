@@ -459,6 +459,69 @@ input::placeholder {
   font-weight: 600;
 }
 
+.directory-picker {
+  background: rgba(5, 13, 29, 0.62);
+  border: 1px solid rgba(53, 231, 255, 0.16);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.directory-picker strong,
+.directory-section span {
+  color: #9feeff;
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.directory-picker small {
+  display: block;
+  margin-top: 4px;
+}
+
+.directory-picker code {
+  background: rgba(2, 6, 16, 0.78);
+  border: 1px solid rgba(53, 231, 255, 0.16);
+  border-radius: 7px;
+  color: #d7f7ff;
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 9px;
+}
+
+.directory-section {
+  display: grid;
+  gap: 7px;
+}
+
+.directory-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.directory-options button {
+  background: rgba(53, 231, 255, 0.1);
+  border: 1px solid rgba(53, 231, 255, 0.24);
+  border-radius: 999px;
+  color: #8ff1ff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 32px;
+  padding: 7px 10px;
+}
+
+.directory-options button.selected,
+.directory-options button:hover {
+  background: rgba(53, 231, 255, 0.22);
+  color: #fff;
+}
+
 .code-editor {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
