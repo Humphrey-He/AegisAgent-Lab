@@ -61,10 +61,22 @@ func main() {
 			fmt.Fprintf(os.Stderr, "encode response: %v\n", err)
 			os.Exit(1)
 		}
+		if hasFailedCall(response.ToolCalls) {
+			os.Exit(1)
+		}
 		return
 	}
 
 	printText(registry, run, response)
+}
+
+func hasFailedCall(calls []tools.ToolCall) bool {
+	for _, call := range calls {
+		if call.Status == "failed" {
+			return true
+		}
+	}
+	return false
 }
 
 func executeTool(registry *tools.Registry, run *trace.Run, name string, arguments map[string]string) tools.ToolCall {

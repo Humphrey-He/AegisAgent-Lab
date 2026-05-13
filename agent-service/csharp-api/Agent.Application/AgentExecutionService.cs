@@ -20,6 +20,7 @@ public sealed class AgentExecutionService
     private readonly IToolCommandRunner runner;
     private readonly string goRuntimeDirectory;
     private readonly string rustToolsDirectory;
+    private readonly string workspaceRoot;
 
     public AgentExecutionService(
         TaskService tasks,
@@ -31,6 +32,7 @@ public sealed class AgentExecutionService
         this.runner = runner;
         this.goRuntimeDirectory = goRuntimeDirectory ?? ResolvePath("go-runtime");
         this.rustToolsDirectory = rustToolsDirectory ?? ResolvePath("rust-tools");
+        this.workspaceRoot = ResolveWorkspaceRoot(this.goRuntimeDirectory);
     }
 
     public async Task<ExecuteTaskResult?> ExecuteAsync(
@@ -78,6 +80,7 @@ public sealed class AgentExecutionService
                     "go",
                     $"run ./cmd/aicli --json read_file {Quote(request.ReadFilePath)}",
                     goRuntimeDirectory,
+                    WorkspaceEnvironment(),
                     cancellationToken));
             }
 
@@ -89,6 +92,7 @@ public sealed class AgentExecutionService
                     "go",
                     "run ./cmd/aicli --json git_diff --stat",
                     goRuntimeDirectory,
+                    WorkspaceEnvironment(),
                     cancellationToken));
             }
 
@@ -99,8 +103,9 @@ public sealed class AgentExecutionService
                     taskId,
                     "rust-code-indexer",
                     "cargo",
-                    $"run -p code-indexer -- scan --root {Quote(request.ScanRoot)} --ext {Quote(extension)}",
+                    $"run -p code-indexer -- scan --root {Quote(ResolveWorkspacePath(request.ScanRoot))} --ext {Quote(extension)}",
                     rustToolsDirectory,
+                    null,
                     cancellationToken));
             }
 
@@ -110,8 +115,9 @@ public sealed class AgentExecutionService
                     taskId,
                     "rust-log-parser",
                     "cargo",
-                    $"run -p log-parser -- summarize --file {Quote(request.LogFilePath)}",
+                    $"run -p log-parser -- summarize --file {Quote(ResolveWorkspacePath(request.LogFilePath))}",
                     rustToolsDirectory,
+                    null,
                     cancellationToken));
             }
 
@@ -138,6 +144,7 @@ public sealed class AgentExecutionService
         string fileName,
         string arguments,
         string workingDirectory,
+        IReadOnlyDictionary<string, string>? environment,
         CancellationToken cancellationToken)
     {
         tasks.AppendTrace(
@@ -148,7 +155,7 @@ public sealed class AgentExecutionService
             $"Running {toolName}.",
             new Dictionary<string, string> { ["command"] = $"{fileName} {arguments}" });
 
-        var result = await runner.RunAsync(fileName, arguments, workingDirectory, cancellationToken);
+        var result = await runner.RunAsync(fileName, arguments, workingDirectory, environment, cancellationToken);
         tasks.AppendTrace(
             taskId,
             result.ExitCode == 0 ? "tool.completed" : "tool.failed",
@@ -180,6 +187,41 @@ public sealed class AgentExecutionService
         }
 
         return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", child));
+    }
+
+    private static string ResolveWorkspaceRoot(string goRuntimeDirectory)
+    {
+        var current = new DirectoryInfo(goRuntimeDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "README.md"))
+                && Directory.Exists(Path.Combine(current.FullName, "agent-service")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        return Path.GetFullPath(Path.Combine(goRuntimeDirectory, "..", ".."));
+    }
+
+    private string ResolveWorkspacePath(string path)
+    {
+        if (Path.IsPathFullyQualified(path))
+        {
+            return path;
+        }
+
+        return Path.GetFullPath(Path.Combine(workspaceRoot, path));
+    }
+
+    private IReadOnlyDictionary<string, string> WorkspaceEnvironment()
+    {
+        return new Dictionary<string, string>
+        {
+            ["AEGIS_WORKSPACE_ROOT"] = workspaceRoot,
+        };
     }
 
     private static string Quote(string value)

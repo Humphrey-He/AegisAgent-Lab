@@ -48,3 +48,23 @@ func TestCLIOutputsJSONForReadFile(t *testing.T) {
 		t.Fatal("response should include risks and next_actions")
 	}
 }
+
+func TestCLIExitsNonZeroWhenToolFails(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "--json", "read_file", "missing-file.txt")
+	output, err := cmd.Output()
+	if err == nil {
+		t.Fatalf("go run succeeded, want failure\n%s", output)
+	}
+
+	var response struct {
+		ToolCalls []struct {
+			Status string `json:"status"`
+		} `json:"tool_calls"`
+	}
+	if err := json.Unmarshal(output, &response); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, output)
+	}
+	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Status != "failed" {
+		t.Fatalf("unexpected tool calls: %+v", response.ToolCalls)
+	}
+}

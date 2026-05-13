@@ -1,6 +1,9 @@
 package tools
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 type Tool interface {
 	Name() string
@@ -17,8 +20,12 @@ func NewRegistry() *Registry {
 	registry := &Registry{
 		tools: make(map[string]Tool),
 	}
-	registry.Register(ReadFileTool{Root: "."})
-	registry.Register(GitDiffTool{Root: "."})
+	root := os.Getenv("AEGIS_WORKSPACE_ROOT")
+	if root == "" {
+		root = "."
+	}
+	registry.Register(ReadFileTool{Root: root})
+	registry.Register(GitDiffTool{Root: root})
 	return registry
 }
 

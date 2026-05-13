@@ -34,6 +34,8 @@ public sealed class AgentExecutionServiceTests
         Assert.Contains(runner.Commands, command => command.FileName == "go" && command.Arguments.Contains("git_diff"));
         Assert.Contains(runner.Commands, command => command.FileName == "cargo" && command.Arguments.Contains("code-indexer"));
         Assert.Contains(runner.Commands, command => command.FileName == "cargo" && command.Arguments.Contains("log-parser"));
+        Assert.Contains(runner.Commands, command => command.FileName == "go" && command.Environment.ContainsKey("AEGIS_WORKSPACE_ROOT"));
+        Assert.Contains(runner.Commands, command => command.FileName == "cargo" && Path.IsPathFullyQualified(command.Arguments.Split("--root \"")[1].Split('"')[0]));
     }
 
     [Fact]
@@ -65,15 +67,16 @@ public sealed class AgentExecutionServiceTests
 
     private sealed class FakeToolCommandRunner : IToolCommandRunner
     {
-        public List<(string FileName, string Arguments, string WorkingDirectory)> Commands { get; } = new();
+        public List<(string FileName, string Arguments, string WorkingDirectory, IReadOnlyDictionary<string, string> Environment)> Commands { get; } = new();
 
         public Task<ToolCommandResult> RunAsync(
             string fileName,
             string arguments,
             string workingDirectory,
+            IReadOnlyDictionary<string, string>? environment = null,
             CancellationToken cancellationToken = default)
         {
-            Commands.Add((fileName, arguments, workingDirectory));
+            Commands.Add((fileName, arguments, workingDirectory, environment ?? new Dictionary<string, string>()));
             return Task.FromResult(new ToolCommandResult(0, "{\"summary\":\"ok\"}", string.Empty));
         }
     }

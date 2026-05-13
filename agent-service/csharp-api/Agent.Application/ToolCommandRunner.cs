@@ -10,6 +10,7 @@ public interface IToolCommandRunner
         string fileName,
         string arguments,
         string workingDirectory,
+        IReadOnlyDictionary<string, string>? environment = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -19,6 +20,7 @@ public sealed class ProcessToolCommandRunner : IToolCommandRunner
         string fileName,
         string arguments,
         string workingDirectory,
+        IReadOnlyDictionary<string, string>? environment = null,
         CancellationToken cancellationToken = default)
     {
         var startInfo = new ProcessStartInfo
@@ -31,6 +33,14 @@ public sealed class ProcessToolCommandRunner : IToolCommandRunner
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+
+        if (environment is not null)
+        {
+            foreach (var item in environment)
+            {
+                startInfo.Environment[item.Key] = item.Value;
+            }
+        }
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start command {fileName}.");
