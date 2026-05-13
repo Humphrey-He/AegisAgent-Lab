@@ -365,10 +365,222 @@ button:disabled {
 }
 
 .button-row,
-.trace-stats {
+.trace-stats,
+.task-action-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.task-detail-layout {
+  align-items: start;
+}
+
+.task-hero,
+.evidence-summary-panel {
+  grid-column: 1 / -1;
+}
+
+.task-hero {
+  display: grid;
+  gap: 16px;
+}
+
+.task-hero-main {
+  align-items: stretch;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+}
+
+.task-objective {
+  display: grid;
+  gap: 8px;
+}
+
+.panel-kicker {
+  color: #7de9ff;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.task-objective h2 {
+  font-size: 24px;
+  line-height: 1.28;
+  max-width: 980px;
+}
+
+.task-objective small,
+.next-action-card span,
+.evidence-card span,
+.evidence-card small {
+  color: #8bb2c5;
+}
+
+.next-action-card {
+  background: rgba(53, 231, 255, 0.08);
+  border: 1px solid rgba(53, 231, 255, 0.22);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 104px;
+  padding: 16px;
+}
+
+.next-action-card strong {
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.task-detail-actions h2,
+.legacy-detail-copy {
+  display: none;
+}
+
+.task-status-strip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.status-chip {
+  align-items: center;
+  background: rgba(5, 13, 29, 0.66);
+  border: 1px solid rgba(53, 231, 255, 0.18);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 10px 12px;
+}
+
+.status-chip span {
+  color: #8bb2c5;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-chip strong {
+  color: #f7fdff;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.status-chip.success {
+  border-color: rgba(19, 227, 138, 0.34);
+}
+
+.status-chip.warning {
+  border-color: rgba(255, 204, 77, 0.34);
+}
+
+.task-action-bar button {
+  background: linear-gradient(135deg, #1187ff, #24d7ff);
+  border: 1px solid rgba(88, 222, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 0 18px rgba(36, 215, 255, 0.18);
+  color: #031225;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.ai-plan-panel,
+.readonly-panel {
+  min-height: 420px;
+}
+
+.ai-plan-content {
+  background: rgba(2, 6, 16, 0.66);
+  border: 1px solid rgba(53, 231, 255, 0.18);
+  border-radius: 8px;
+  color: #d7f7ff;
+  line-height: 1.65;
+  max-height: 520px;
+  overflow: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+.empty-state {
+  align-content: center;
+  background: rgba(5, 13, 29, 0.54);
+  border: 1px dashed rgba(53, 231, 255, 0.3);
+  border-radius: 8px;
+  color: #cfeaf3;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  min-height: 220px;
+  padding: 18px;
+}
+
+.empty-state strong {
+  color: #fff;
+  font-size: 18px;
+}
+
+.empty-state p {
+  line-height: 1.55;
+  margin: 0;
+}
+
+.empty-state button {
+  align-items: center;
+  background: linear-gradient(135deg, #1187ff, #24d7ff);
+  border: 1px solid rgba(88, 222, 255, 0.35);
+  border-radius: 8px;
+  color: #031225;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 900;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.lead-text.compact {
+  font-size: 13px;
+  margin-top: -6px;
+}
+
+.evidence-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.evidence-card {
+  background: rgba(5, 13, 29, 0.62);
+  border: 1px solid rgba(53, 231, 255, 0.16);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+}
+
+.evidence-card strong {
+  color: #fff;
+  font-size: 20px;
+}
+
+.advanced-trace {
+  background: rgba(5, 13, 29, 0.42);
+  border: 1px solid rgba(53, 231, 255, 0.14);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.advanced-trace .timeline {
+  margin-top: 14px;
 }
 
 .readiness-row,
@@ -911,13 +1123,16 @@ pre {
   .tool-grid,
   .doc-grid,
   .guide-card-grid,
-  .rule-grid {
+  .rule-grid,
+  .task-hero-main,
+  .evidence-grid {
     grid-template-columns: 1fr;
   }
 
   .readiness-row,
   .detail-grid,
-  .model-config-grid {
+  .model-config-grid,
+  .task-status-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -935,7 +1150,8 @@ pre {
 
   .readiness-row,
   .detail-grid,
-  .model-config-grid {
+  .model-config-grid,
+  .task-status-strip {
     grid-template-columns: 1fr;
   }
 

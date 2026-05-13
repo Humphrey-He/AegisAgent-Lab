@@ -518,14 +518,29 @@ function TaskDetail({
   onExportTrace: () => void
   onPlanTask: () => void
 }) {
+  const aiPlan = latestAiPlan(trace)
+  const evidence = summarizeTrace(trace, language)
+  const nextStep = recommendedNextStep(task, aiPlan, language)
+
   return (
-    <div className="content-grid">
-      <section className="panel wide">
-        <div className="section-title">
+    <div className="content-grid task-detail-layout">
+      <section className="panel task-hero">
+        <div className="task-hero-main">
+          <div className="task-objective">
+            <span className="panel-kicker">{t(language, 'taskObjective')}</span>
+            <h2>{task.input}</h2>
+            <small>{task.id} / {t(language, 'requestedBy')} {task.requestedBy} / {formatDate(task.createdAt)}</small>
+          </div>
+          <div className="next-action-card">
+            <span>{t(language, 'recommendedNextStep')}</span>
+            <strong>{nextStep}</strong>
+          </div>
+        </div>
+        <div className="section-title task-detail-actions">
           <h2>{t(language, 'taskDetail')}</h2>
           <div className="button-row">
             <button onClick={onPlanTask}>
-              <Sparkles size={16} /> {t(language, 'runAiPlan')}
+              <Sparkles size={16} /> {aiPlan ? t(language, 'regenerateAiPlan') : t(language, 'runAiPlan')}
             </button>
             <button onClick={onApprove} disabled={task.approvalStatus !== 'Pending'}>
               <Check size={16} /> {t(language, 'approve')}
@@ -535,39 +550,62 @@ function TaskDetail({
             </button>
           </div>
         </div>
-        <div className="detail-grid">
-          <StatusBlock label={t(language, 'status')} value={task.status} tone={task.status === 'Completed' ? 'success' : 'neutral'} />
-          <StatusBlock label={t(language, 'risk')} value={task.riskLevel} tone={task.riskLevel === 'Low' ? 'success' : 'warning'} />
-          <StatusBlock label={t(language, 'approval')} value={task.approvalStatus} tone={task.approvalStatus === 'Pending' ? 'warning' : 'neutral'} />
-          <StatusBlock label={t(language, 'traceEvents')} value={String(trace.length)} tone="neutral" />
+        <div className="task-status-strip">
+          <StatusChip label={t(language, 'status')} value={task.status} tone={task.status === 'Completed' ? 'success' : 'neutral'} />
+          <StatusChip label={t(language, 'risk')} value={task.riskLevel} tone={task.riskLevel === 'Low' ? 'success' : 'warning'} />
+          <StatusChip label={t(language, 'approval')} value={task.approvalStatus} tone={task.approvalStatus === 'Pending' ? 'warning' : 'neutral'} />
+          <StatusChip label={t(language, 'traceEvents')} value={String(trace.length)} tone="neutral" />
         </div>
-        <div className="detail-copy">
+        <div className="detail-copy legacy-detail-copy">
           <span>{task.id}</span>
           <p>{task.input}</p>
           <small>{t(language, 'requestedBy')} {task.requestedBy} · {formatDate(task.createdAt)}</small>
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel ai-plan-panel">
         <div className="section-title">
-          <h2>{t(language, 'aiPlan')}</h2>
+          <h2>{t(language, 'aiSuggestedPlan')}</h2>
           <Sparkles size={18} />
         </div>
-        <p className="lead-text">{t(language, 'aiPlanHint')}</p>
+        {aiPlan ? (
+          <div className="ai-plan-content">{aiPlan}</div>
+        ) : (
+          <div className="empty-state">
+            <Sparkles size={20} />
+            <strong>{t(language, 'noAiPlanYet')}</strong>
+            <p>{t(language, 'generatePlanFirst')}</p>
+            <button onClick={onPlanTask}>
+              <Sparkles size={16} /> {t(language, 'runAiPlan')}
+            </button>
+          </div>
+        )}
       </section>
 
       <ExecutePanel language={language} onExecute={onExecute} />
 
-      <section className="panel wide">
+      <section className="panel evidence-summary-panel">
         <div className="section-title">
-          <h2><Glossary language={language} term="Trace" label={t(language, 'traceTimeline')} /></h2>
+          <h2>{t(language, 'executionEvidence')}</h2>
           <div className="trace-stats">
             <Badge value={`completed ${traceStatus.completed}`} />
             <Badge value={`blocked ${traceStatus.blocked}`} />
             <Badge value={`failed ${traceStatus.failed}`} />
           </div>
         </div>
-        <TraceTimeline language={language} events={trace} />
+        <div className="evidence-grid">
+          {evidence.map((item) => (
+            <article className="evidence-card" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.hint}</small>
+            </article>
+          ))}
+        </div>
+        <details className="advanced-trace">
+          <summary><Glossary language={language} term="Trace" label={t(language, 'advancedTrace')} /></summary>
+          <TraceTimeline language={language} events={trace} />
+        </details>
       </section>
 
       <section className="panel">
@@ -610,22 +648,23 @@ function ExecutePanel({ language, onExecute }: { language: Language; onExecute: 
   }
 
   return (
-    <section className="panel">
+    <section className="panel readonly-panel">
       <div className="section-title">
-        <h2>{t(language, 'execute')}</h2>
+        <h2>{t(language, 'readonlyInspection')}</h2>
         <Play size={18} />
       </div>
+      <p className="lead-text compact">{t(language, 'readonlyInspectionHint')}</p>
       <form className="stack-form" onSubmit={submit}>
         <label>
-          {t(language, 'readFilePath')}
+          {t(language, 'readProjectFile')}
           <input value={readFilePath} onChange={(event) => setReadFilePath(event.target.value)} />
         </label>
         <label className="check-row">
           <input type="checkbox" checked={includeGitDiff} onChange={(event) => setIncludeGitDiff(event.target.checked)} />
-          {t(language, 'includeGitDiff')}
+          {t(language, 'inspectGitChanges')}
         </label>
         <label>
-          {t(language, 'scanRoot')}
+          {t(language, 'scanCodeDirectory')}
           <input value={scanRoot} onChange={(event) => setScanRoot(event.target.value)} />
         </label>
         <label>
@@ -633,11 +672,11 @@ function ExecutePanel({ language, onExecute }: { language: Language; onExecute: 
           <input value={scanExtension} onChange={(event) => setScanExtension(event.target.value)} />
         </label>
         <label>
-          {t(language, 'logFilePath')}
+          {t(language, 'analyzeLogFile')}
           <input value={logFilePath} onChange={(event) => setLogFilePath(event.target.value)} placeholder={t(language, 'optionalAbsolutePath')} />
         </label>
         <button type="submit">
-          <Play size={16} /> {t(language, 'execute')}
+          <Play size={16} /> {t(language, 'runReadonlyCheck')}
         </button>
       </form>
     </section>
@@ -1098,6 +1137,15 @@ function Glossary({ language, term, label }: { language: Language; term: Glossar
   )
 }
 
+function StatusChip({ label, value, tone }: { label: string; value: string; tone: 'neutral' | 'success' | 'warning' }) {
+  return (
+    <div className={`status-chip ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
 function StatusBlock({ label, value, tone }: { label: string; value: string; tone: 'neutral' | 'success' | 'warning' }) {
   return (
     <div className={`status-block ${tone}`}>
@@ -1136,6 +1184,33 @@ function JsonViewer({ language, value }: { language: Language; value: unknown })
 
 function sortTasks(items: AgentTask[]) {
   return [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+}
+
+function latestAiPlan(events: AgentTraceEvent[]) {
+  return [...events].reverse().find((event) => event.name === 'task.ai_planned')?.message
+}
+
+function recommendedNextStep(task: AgentTask, aiPlan: string | undefined, language: Language) {
+  if (task.approvalStatus === 'Pending') return t(language, 'nextApproveThenInspect')
+  if (task.approvalStatus === 'Rejected') return t(language, 'nextCreateNewTask')
+  if (!aiPlan) return t(language, 'nextGeneratePlan')
+  if (task.status === 'Completed') return t(language, 'nextReviewEvidence')
+  if (task.status === 'Failed') return t(language, 'nextReviewFailure')
+  return t(language, 'nextRunReadonlyCheck')
+}
+
+function summarizeTrace(events: AgentTraceEvent[], language: Language) {
+  const modelEvents = events.filter((event) => event.name.startsWith('model.')).length
+  const toolEvents = events.filter((event) => event.name.startsWith('tool.') || event.toolName !== 'system').length
+  const failedEvents = events.filter((event) => event.status === 'failed').length
+  const lastEvent = events.at(-1)
+
+  return [
+    { label: 'Trace', value: String(events.length), hint: t(language, 'traceTotalEvents') },
+    { label: 'AI', value: String(modelEvents), hint: t(language, 'traceModelEvents') },
+    { label: 'Tools', value: String(toolEvents), hint: t(language, 'traceReadonlyCalls') },
+    { label: t(language, 'traceLatest'), value: lastEvent?.name ?? '-', hint: failedEvents > 0 ? `${failedEvents} ${t(language, 'traceFailed')}` : t(language, 'traceNoFailure') },
+  ]
 }
 
 function optional(value: string) {
