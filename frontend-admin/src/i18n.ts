@@ -185,6 +185,21 @@ const zh: Messages = {
   traceLatest: '最新事件',
   traceFailed: '失败',
   traceNoFailure: '未记录失败',
+  templateProjectHealth: '项目体检',
+  templateProjectHealthDesc: '读取 README、Git 改动和目录结构，快速判断项目状态。',
+  templateCodeReading: '代码阅读',
+  templateCodeReadingDesc: '梳理模块职责、接口边界和后续扩展点。',
+  templateLogAnalysis: '日志分析',
+  templateLogAnalysisDesc: '统计异常关键词并给出排查方向。',
+  templateProductPlan: '产品规划',
+  templateProductPlanDesc: '输出用户、场景、MVP、排期和验收标准。',
+  templateSkillWriting: 'Skill 编写',
+  templateSkillWritingDesc: '生成 Skill 的触发条件、流程、边界和示例。',
+  templateEcommerceResearch: '电商平台分析',
+  templateEcommerceResearchDesc: '拆解淘宝类软件的角色、模块、MVP 和阶段路线。',
+  executionReport: '执行报告',
+  copyReport: '复制报告',
+  downloadReport: '下载报告',
 }
 
 const en: Messages = {
@@ -370,6 +385,21 @@ const en: Messages = {
   traceLatest: 'Latest',
   traceFailed: 'failed',
   traceNoFailure: 'no failure recorded',
+  templateProjectHealth: 'Project health',
+  templateProjectHealthDesc: 'Read README, Git changes, and structure to assess project status.',
+  templateCodeReading: 'Code reading',
+  templateCodeReadingDesc: 'Explain modules, API boundaries, and extension points.',
+  templateLogAnalysis: 'Log analysis',
+  templateLogAnalysisDesc: 'Count failure keywords and suggest follow-up checks.',
+  templateProductPlan: 'Product planning',
+  templateProductPlanDesc: 'Produce users, scenarios, MVP, roadmap, and acceptance criteria.',
+  templateSkillWriting: 'Skill writing',
+  templateSkillWritingDesc: 'Draft triggers, workflow, boundaries, and examples for a Skill.',
+  templateEcommerceResearch: 'E-commerce analysis',
+  templateEcommerceResearchDesc: 'Break down Taobao-like roles, modules, MVP, and roadmap.',
+  executionReport: 'Execution Report',
+  copyReport: 'Copy report',
+  downloadReport: 'Download report',
 }
 
 const dictionaries = { zh, en }

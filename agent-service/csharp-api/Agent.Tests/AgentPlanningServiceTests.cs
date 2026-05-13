@@ -33,6 +33,22 @@ public sealed class AgentPlanningServiceTests
     }
 
     [Fact]
+    public async Task PlanTaskPromptRequestsExecutionRequestJson()
+    {
+        var client = new CapturingModelClient("plan");
+        var tasks = new TaskService();
+        var task = tasks.Create("Inspect docs.", "tester");
+        var service = new AgentPlanningService(tasks, client);
+
+        await service.PlanTaskAsync(task.Id);
+
+        var system = Assert.Single(client.LastRequest!.Messages.Where(message => message.Role == "system"));
+        Assert.Contains("execution_request", system.Content);
+        Assert.Contains("readFilePath", system.Content);
+        Assert.Contains("includeGitDiff", system.Content);
+    }
+
+    [Fact]
     public async Task PlanTaskReturnsNullForMissingTask()
     {
         var service = new AgentPlanningService(new TaskService(), new FakeModelClient("unused"));
@@ -58,6 +74,29 @@ public sealed class AgentPlanningServiceTests
 
         public Task<ModelResponse> CompleteAsync(ModelRequest request, CancellationToken cancellationToken = default)
         {
+            return Task.FromResult(new ModelResponse("Fake", "https://example.test/v1", "fake-model", content, 12, TotalTokens: 8));
+        }
+    }
+
+    private sealed class CapturingModelClient : IModelClient
+    {
+        private readonly string content;
+
+        public CapturingModelClient(string content)
+        {
+            this.content = content;
+        }
+
+        public ModelRequest? LastRequest { get; private set; }
+
+        public ModelGatewayConfig GetConfig()
+        {
+            return new ModelGatewayConfig("Fake", "https://example.test/v1", "fake-model", true);
+        }
+
+        public Task<ModelResponse> CompleteAsync(ModelRequest request, CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
             return Task.FromResult(new ModelResponse("Fake", "https://example.test/v1", "fake-model", content, 12, TotalTokens: 8));
         }
     }

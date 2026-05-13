@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Code2,
   Copy,
+  Download,
   FileJson,
   GitBranch,
   Gauge,
@@ -64,6 +65,73 @@ const toolCatalog = [
 const riskOptions: RiskLevel[] = ['Low', 'Medium', 'High']
 
 type View = 'dashboard' | 'tasks' | 'detail' | 'tools' | 'docs' | 'skills' | 'ai'
+
+type TaskTemplate = {
+  id: string
+  icon: React.ReactNode
+  riskLevel: RiskLevel
+  titleKey: string
+  descriptionKey: string
+  input: string
+  executeDefaults: ExecuteTaskRequest
+}
+
+const taskTemplates: TaskTemplate[] = [
+  {
+    id: 'project-health',
+    icon: <Gauge size={17} />,
+    riskLevel: 'Low',
+    titleKey: 'templateProjectHealth',
+    descriptionKey: 'templateProjectHealthDesc',
+    input: 'Run a read-only project health check. Review README.md, inspect current Git changes, scan source directories, and summarize status, risks, and next actions.',
+    executeDefaults: { readFilePath: 'README.md', includeGitDiff: true, scanRoot: '.', scanExtension: 'md' },
+  },
+  {
+    id: 'code-reading',
+    icon: <Code2 size={17} />,
+    riskLevel: 'Low',
+    titleKey: 'templateCodeReading',
+    descriptionKey: 'templateCodeReadingDesc',
+    input: 'Read the codebase structure and explain the main modules, runtime responsibilities, public APIs, and likely extension points.',
+    executeDefaults: { readFilePath: 'README.md', includeGitDiff: true, scanRoot: 'agent-service', scanExtension: 'cs' },
+  },
+  {
+    id: 'log-analysis',
+    icon: <Search size={17} />,
+    riskLevel: 'Low',
+    titleKey: 'templateLogAnalysis',
+    descriptionKey: 'templateLogAnalysisDesc',
+    input: 'Analyze logs in read-only mode. Count error, warn, panic, and timeout keywords, summarize likely causes, and propose next checks.',
+    executeDefaults: { includeGitDiff: false, scanRoot: 'reports', scanExtension: 'md', logFilePath: '' },
+  },
+  {
+    id: 'product-plan',
+    icon: <Rocket size={17} />,
+    riskLevel: 'Low',
+    titleKey: 'templateProductPlan',
+    descriptionKey: 'templateProductPlanDesc',
+    input: 'Create a product planning brief. Clarify user personas, core scenarios, MVP scope, phased roadmap, risks, and measurable acceptance criteria.',
+    executeDefaults: { readFilePath: 'docs/frontend-admin-product-plan.md', includeGitDiff: true, scanRoot: 'docs', scanExtension: 'md' },
+  },
+  {
+    id: 'skill-writing',
+    icon: <Sparkles size={17} />,
+    riskLevel: 'Low',
+    titleKey: 'templateSkillWriting',
+    descriptionKey: 'templateSkillWritingDesc',
+    input: 'Draft a Skill design brief. Define trigger conditions, non-use cases, workflow, input/output contract, pitfalls, examples, source, and versioning.',
+    executeDefaults: { readFilePath: 'docs/frontend-admin-implementation.md', includeGitDiff: false, scanRoot: 'docs', scanExtension: 'md' },
+  },
+  {
+    id: 'ecommerce-research',
+    icon: <Search size={17} />,
+    riskLevel: 'Medium',
+    titleKey: 'templateEcommerceResearch',
+    descriptionKey: 'templateEcommerceResearchDesc',
+    input: 'Analyze how to build Taobao-like e-commerce software. Break down user roles, marketplace modules, product/search/order/payment/merchant systems, data needs, MVP scope, and phased delivery. Use only provided or local project context unless web browsing is explicitly added later.',
+    executeDefaults: { readFilePath: 'README.md', includeGitDiff: false, scanRoot: 'docs', scanExtension: 'md' },
+  },
+]
 
 function App() {
   const [language, setLanguage] = useState<Language>('zh')
@@ -403,9 +471,16 @@ function TasksView({
   onSelect: (id: string) => void
   onRefresh: () => void
 }) {
-  const [input, setInput] = useState('Read README.md and summarize current project status.')
+  const [selectedTemplateId, setSelectedTemplateId] = useState(taskTemplates[0].id)
+  const [input, setInput] = useState(taskTemplates[0].input)
   const [requestedBy, setRequestedBy] = useState('agent-operator')
-  const [riskLevel, setRiskLevel] = useState<RiskLevel>('Low')
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>(taskTemplates[0].riskLevel)
+
+  function applyTemplate(template: TaskTemplate) {
+    setSelectedTemplateId(template.id)
+    setInput(template.input)
+    setRiskLevel(template.riskLevel)
+  }
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -419,6 +494,20 @@ function TasksView({
         <div className="section-title">
           <h2>{t(language, 'createTask')}</h2>
           <ClipboardList size={18} />
+        </div>
+        <div className="template-grid">
+          {taskTemplates.map((template) => (
+            <button
+              className={selectedTemplateId === template.id ? 'template-card selected' : 'template-card'}
+              key={template.id}
+              onClick={() => applyTemplate(template)}
+              type="button"
+            >
+              <span>{template.icon}</span>
+              <strong>{t(language, template.titleKey)}</strong>
+              <small>{t(language, template.descriptionKey)}</small>
+            </button>
+          ))}
         </div>
         <form onSubmit={submit} className="stack-form">
           <label>
@@ -519,8 +608,14 @@ function TaskDetail({
   onPlanTask: () => void
 }) {
   const aiPlan = latestAiPlan(trace)
+  const suggestedExecution = useMemo(() => deriveExecutionRequest(task, aiPlan), [task, aiPlan])
+  const suggestedExecutionKey = JSON.stringify(suggestedExecution)
   const evidence = summarizeTrace(trace, language)
   const nextStep = recommendedNextStep(task, aiPlan, language)
+  const executionReport = useMemo(
+    () => generateExecutionReport(task, trace, toolResults, aiPlan, language),
+    [task, trace, toolResults, aiPlan, language],
+  )
 
   return (
     <div className="content-grid task-detail-layout">
@@ -582,7 +677,12 @@ function TaskDetail({
         )}
       </section>
 
-      <ExecutePanel language={language} onExecute={onExecute} />
+      <ExecutePanel
+        key={suggestedExecutionKey}
+        language={language}
+        suggestedRequest={suggestedExecution}
+        onExecute={onExecute}
+      />
 
       <section className="panel evidence-summary-panel">
         <div className="section-title">
@@ -610,6 +710,21 @@ function TaskDetail({
 
       <section className="panel">
         <div className="section-title">
+          <h2>{t(language, 'executionReport')}</h2>
+          <div className="button-row">
+            <button onClick={() => void copyText(executionReport)}>
+              <Copy size={16} /> {t(language, 'copyReport')}
+            </button>
+            <button onClick={() => downloadText(`task-${task.id}-report.md`, executionReport)}>
+              <Download size={16} /> {t(language, 'downloadReport')}
+            </button>
+          </div>
+        </div>
+        <pre className="report-viewer">{executionReport}</pre>
+      </section>
+
+      <section className="panel">
+        <div className="section-title">
           <h2>{t(language, 'traceExport')}</h2>
           <button onClick={onExportTrace}>
             <FileJson size={16} /> {t(language, 'loadJson')}
@@ -618,7 +733,7 @@ function TaskDetail({
         <JsonViewer language={language} value={traceExport ?? { message: t(language, 'clickLoadJson') }} />
       </section>
 
-      <section className="panel">
+      <section className="panel tool-results-panel">
         <div className="section-title">
           <h2>{t(language, 'toolResults')}</h2>
           <GitBranch size={18} />
@@ -629,12 +744,20 @@ function TaskDetail({
   )
 }
 
-function ExecutePanel({ language, onExecute }: { language: Language; onExecute: (payload: ExecuteTaskRequest) => void }) {
-  const [readFilePath, setReadFilePath] = useState('go.mod')
-  const [includeGitDiff, setIncludeGitDiff] = useState(true)
-  const [scanRoot, setScanRoot] = useState('crates')
-  const [scanExtension, setScanExtension] = useState('rs')
-  const [logFilePath, setLogFilePath] = useState('')
+function ExecutePanel({
+  language,
+  suggestedRequest,
+  onExecute,
+}: {
+  language: Language
+  suggestedRequest: ExecuteTaskRequest
+  onExecute: (payload: ExecuteTaskRequest) => void
+}) {
+  const [readFilePath, setReadFilePath] = useState(suggestedRequest.readFilePath ?? '')
+  const [includeGitDiff, setIncludeGitDiff] = useState(suggestedRequest.includeGitDiff)
+  const [scanRoot, setScanRoot] = useState(suggestedRequest.scanRoot ?? '')
+  const [scanExtension, setScanExtension] = useState(suggestedRequest.scanExtension ?? '')
+  const [logFilePath, setLogFilePath] = useState(suggestedRequest.logFilePath ?? '')
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -1190,6 +1313,79 @@ function latestAiPlan(events: AgentTraceEvent[]) {
   return [...events].reverse().find((event) => event.name === 'task.ai_planned')?.message
 }
 
+function deriveExecutionRequest(task: AgentTask, aiPlan?: string): ExecuteTaskRequest {
+  const template = taskTemplates.find((item) => task.input.includes(item.input.slice(0, 48)))
+  const fromJson = aiPlan ? parseExecutionRequestFromPlan(aiPlan) : null
+
+  return normalizeExecutionRequest(fromJson ?? template?.executeDefaults ?? inferExecutionRequest(task.input))
+}
+
+function parseExecutionRequestFromPlan(plan: string): ExecuteTaskRequest | null {
+  const jsonBlocks = [
+    ...plan.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
+    ...plan.matchAll(/({[\s\S]*})/g),
+  ]
+
+  for (const match of jsonBlocks) {
+    try {
+      const parsed = JSON.parse(match[1])
+      const candidate = parsed.execution_request ?? parsed.executionRequest ?? parsed.read_only_execution ?? parsed
+      if (isRecord(candidate)) {
+        return {
+          readFilePath: stringValue(candidate.readFilePath ?? candidate.read_file_path),
+          includeGitDiff: booleanValue(candidate.includeGitDiff ?? candidate.include_git_diff, true),
+          scanRoot: stringValue(candidate.scanRoot ?? candidate.scan_root),
+          scanExtension: stringValue(candidate.scanExtension ?? candidate.scan_extension),
+          logFilePath: stringValue(candidate.logFilePath ?? candidate.log_file_path),
+        }
+      }
+    } catch {
+      // Ignore non-JSON plan text and fall back to heuristic defaults.
+    }
+  }
+
+  return null
+}
+
+function inferExecutionRequest(input: string): ExecuteTaskRequest {
+  const lower = input.toLowerCase()
+  if (lower.includes('log') || lower.includes('日志')) {
+    return { includeGitDiff: false, scanRoot: 'reports', scanExtension: 'md' }
+  }
+  if (lower.includes('skill')) {
+    return { readFilePath: 'docs/frontend-admin-implementation.md', includeGitDiff: false, scanRoot: 'docs', scanExtension: 'md' }
+  }
+  if (lower.includes('product') || lower.includes('产品') || lower.includes('淘宝') || lower.includes('e-commerce')) {
+    return { readFilePath: 'README.md', includeGitDiff: false, scanRoot: 'docs', scanExtension: 'md' }
+  }
+  if (lower.includes('code') || lower.includes('代码')) {
+    return { readFilePath: 'README.md', includeGitDiff: true, scanRoot: 'agent-service', scanExtension: 'cs' }
+  }
+  return { readFilePath: 'README.md', includeGitDiff: true, scanRoot: '.', scanExtension: 'md' }
+}
+
+function normalizeExecutionRequest(request: ExecuteTaskRequest): ExecuteTaskRequest {
+  return {
+    readFilePath: request.readFilePath,
+    includeGitDiff: request.includeGitDiff ?? true,
+    scanRoot: request.scanRoot,
+    scanExtension: request.scanExtension,
+    logFilePath: request.logFilePath,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function booleanValue(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
 function recommendedNextStep(task: AgentTask, aiPlan: string | undefined, language: Language) {
   if (task.approvalStatus === 'Pending') return t(language, 'nextApproveThenInspect')
   if (task.approvalStatus === 'Rejected') return t(language, 'nextCreateNewTask')
@@ -1211,6 +1407,91 @@ function summarizeTrace(events: AgentTraceEvent[], language: Language) {
     { label: 'Tools', value: String(toolEvents), hint: t(language, 'traceReadonlyCalls') },
     { label: t(language, 'traceLatest'), value: lastEvent?.name ?? '-', hint: failedEvents > 0 ? `${failedEvents} ${t(language, 'traceFailed')}` : t(language, 'traceNoFailure') },
   ]
+}
+
+function generateExecutionReport(
+  task: AgentTask,
+  events: AgentTraceEvent[],
+  toolResults: ToolCommandResult[],
+  aiPlan: string | undefined,
+  language: Language,
+) {
+  const completed = events.filter((event) => event.status === 'completed').length
+  const blocked = events.filter((event) => event.status === 'blocked').length
+  const failed = events.filter((event) => event.status === 'failed').length
+  const tools = Array.from(new Set(events.filter((event) => event.toolName !== 'system').map((event) => event.toolName)))
+  const latest = events.at(-1)
+  const outputPreview = toolResults
+    .map((result, index) => {
+      const output = result.standardOutput || result.standardError || ''
+      return `- Tool result ${index + 1}: exit=${result.exitCode}, preview=${trimReport(output)}`
+    })
+    .join('\n')
+
+  if (language === 'en') {
+    return `# Task Execution Report
+
+## Objective
+${task.input}
+
+## Status
+- Task ID: ${task.id}
+- Status: ${task.status}
+- Risk: ${task.riskLevel}
+- Approval: ${task.approvalStatus}
+
+## AI Suggested Plan
+${aiPlan || 'No AI plan was generated yet.'}
+
+## Execution Evidence
+- Trace events: ${events.length}
+- Completed: ${completed}
+- Blocked: ${blocked}
+- Failed: ${failed}
+- Tools: ${tools.join(', ') || 'None'}
+- Latest event: ${latest?.name ?? 'None'}
+
+## Tool Result Preview
+${outputPreview || 'No tool result is available in this UI session.'}
+
+## Recommended Next Step
+${recommendedNextStep(task, aiPlan, language)}
+`
+  }
+
+  return `# 任务执行报告
+
+## 任务目标
+${task.input}
+
+## 当前状态
+- 任务 ID：${task.id}
+- 状态：${task.status}
+- 风险：${task.riskLevel}
+- 审批：${task.approvalStatus}
+
+## AI 建议方案
+${aiPlan || '尚未生成 AI 建议方案。'}
+
+## 执行证据
+- Trace 事件数：${events.length}
+- 已完成事件：${completed}
+- 阻塞事件：${blocked}
+- 失败事件：${failed}
+- 工具：${tools.join('、') || '无'}
+- 最新事件：${latest?.name ?? '无'}
+
+## 工具结果预览
+${outputPreview || '当前 UI 会话暂无工具结果。'}
+
+## 推荐下一步
+${recommendedNextStep(task, aiPlan, language)}
+`
+}
+
+function trimReport(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > 180 ? `${normalized.slice(0, 180)}...` : normalized || 'empty'
 }
 
 function optional(value: string) {
@@ -1239,6 +1520,20 @@ function titleForView(view: View, language: Language) {
 
 function toMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error'
+}
+
+async function copyText(value: string) {
+  await navigator.clipboard.writeText(value)
+}
+
+function downloadText(filename: string, value: string) {
+  const blob = new Blob([value], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export default App

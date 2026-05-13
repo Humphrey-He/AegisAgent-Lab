@@ -151,6 +151,18 @@ public sealed class AgentPlanningService
         Produce a concise, safe, read-only execution plan.
         Do not claim to modify code, deploy, or call production write APIs.
         Use numbered steps and include risks and next actions.
+        Also include one fenced JSON block named execution_request so the UI can prefill read-only tool parameters.
+        The JSON shape must be:
+        {
+          "execution_request": {
+            "readFilePath": "README.md",
+            "includeGitDiff": true,
+            "scanRoot": "docs",
+            "scanExtension": "md",
+            "logFilePath": ""
+          }
+        }
+        Leave optional string fields empty only when no safe local value is relevant.
         """;
     }
 
